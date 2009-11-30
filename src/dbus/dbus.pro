@@ -25,8 +25,7 @@ win32 {
         -ladvapi32 \
         -lnetapi32 \
         -luser32
-    CONFIG(debug, debug|release):LIBS_PRIVATE += -ldbus-1d
-    else:LIBS_PRIVATE += -ldbus-1
+    LIBS_PRIVATE += -ldbus-1
 }
 include(../qbase.pri)
 PUB_HEADERS = qdbusargument.h \
