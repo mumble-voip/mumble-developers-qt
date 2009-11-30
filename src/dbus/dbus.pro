@@ -11,7 +11,7 @@ contains(QT_CONFIG, dbus-linked) {
     DEFINES += QT_LINKED_LIBDBUS
 }
 
-# INCLUDEPATH += .
+INCLUDEPATH += .
 unix|win32-g++* {
     QMAKE_PKGCONFIG_DESCRIPTION = Qt \
         DBus \
