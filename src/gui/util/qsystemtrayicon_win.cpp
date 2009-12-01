@@ -220,7 +220,7 @@ bool QSystemTrayIconSys::showMessage(const QString &title, const QString &messag
     tnd.cbSize = notifyIconSize;
     tnd.hWnd = winId();
     tnd.uTimeout = uSecs;
-    tnd.uFlags = NIF_INFO | NIF_SHOWTIP;
+    tnd.uFlags = NIF_INFO | NIF_SHOWTIP | NIF_REALTIME;
 
     Q_ASSERT(testAttribute(Qt::WA_WState_Created));
 
