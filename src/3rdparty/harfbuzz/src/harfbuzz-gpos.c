@@ -2993,7 +2993,7 @@ static HB_Error  Lookup_MarkMarkPos( GPOS_Instance*    gpi,
 
   i = 1;
   j = buffer->in_pos - 1;
-  while ( i <= buffer->in_pos )
+  while ( i < buffer->in_pos )
   {
     error = HB_GDEF_Get_Glyph_Property( gpos->gdef, IN_GLYPH( j ),
 					&property );
