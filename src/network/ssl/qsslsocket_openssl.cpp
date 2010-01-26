@@ -1284,6 +1284,9 @@ bool QSslSocketBackendPrivate::startHandshake()
         return false;
     }
 
+    // Drain error queue
+    while(q_ERR_get_error());
+
     // Store the peer certificate and chain. For clients, the peer certificate
     // chain includes the peer certificate; for servers, it doesn't. Both the
     // peer certificate and the chain may be empty if the peer didn't present
