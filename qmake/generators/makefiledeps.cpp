@@ -627,7 +627,7 @@ bool QMakeSourceFileInfo::findDeps(SourceFile *file)
                 if(QDir::isRelativePath(lfn.real())) {
                     if(try_local) {
                         QDir sourceDir = findFileInfo(sourceFile).dir();
-                        QMakeLocalFileName f(sourceDir.absoluteFilePath(lfn.local()));
+                        QMakeLocalFileName f(sourceDir.relativeFilePath(lfn.local()));
                         if(findFileInfo(f).exists()) {
                             lfn = fixPathForFile(f);
                             exists = true;
