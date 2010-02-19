@@ -957,6 +957,9 @@ bool QGraphicsProxyWidget::eventFilter(QObject *object, QEvent *event)
                 d->visibleChangeMode = QGraphicsProxyWidgetPrivate::WidgetToProxyMode;
                 setVisible(event->type() == QEvent::Show);
                 d->visibleChangeMode = QGraphicsProxyWidgetPrivate::NoMode;
+                
+                if (d->widget->testAttribute(Qt::WA_ShowModal))
+                	setPanelModality(QGraphicsItem::SceneModal);
             }
             break;
         case QEvent::EnabledChange:
