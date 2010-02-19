@@ -2721,6 +2721,7 @@ bool QCoreApplication::hasPendingEvents()
 
     \sa processEvents(), exec(), QTimer
 */
+#endif
 
 /*! \obsolete
 
@@ -2768,7 +2769,6 @@ int QCoreApplication::loopLevel()
         return -1;
     return self->d_func()->threadData->eventLoops.size();
 }
-#endif
 
 /*
     \fn void QCoreApplication::watchUnixSignal(int signal, bool watch)

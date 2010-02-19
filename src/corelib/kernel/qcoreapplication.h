@@ -172,10 +172,10 @@ public:
 
     static inline QT3_SUPPORT void processOneEvent()
     { processEvents(QEventLoop::WaitForMoreEvents); }
-    static QT3_SUPPORT int enter_loop();
-    static QT3_SUPPORT void exit_loop();
-    static QT3_SUPPORT int loopLevel();
 #endif
+    static int enter_loop();
+    static void exit_loop();
+    static int loopLevel();
 
 #if defined(Q_WS_WIN)
     virtual bool winEventFilter(MSG *message, long *result);
