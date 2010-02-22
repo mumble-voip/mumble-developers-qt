@@ -958,8 +958,11 @@ bool QGraphicsProxyWidget::eventFilter(QObject *object, QEvent *event)
                 setVisible(event->type() == QEvent::Show);
                 d->visibleChangeMode = QGraphicsProxyWidgetPrivate::NoMode;
                 
-                if (d->widget->testAttribute(Qt::WA_ShowModal))
+                if (d->widget->testAttribute(Qt::WA_ShowModal)) {
                 	setPanelModality(QGraphicsItem::SceneModal);
+                	if (isVisible())
+                		setFocus();
+				}
             }
             break;
         case QEvent::EnabledChange:
