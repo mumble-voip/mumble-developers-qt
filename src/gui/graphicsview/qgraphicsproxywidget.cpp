@@ -959,7 +959,7 @@ bool QGraphicsProxyWidget::eventFilter(QObject *object, QEvent *event)
                 d->visibleChangeMode = QGraphicsProxyWidgetPrivate::NoMode;
                 
                 if (d->widget->testAttribute(Qt::WA_ShowModal)) {
-                	setPanelModality(QGraphicsItem::SceneModal);
+                	setPanelModality(QGraphicsItem::PanelModal);
                 	if (isVisible())
                 		setFocus();
 				}
