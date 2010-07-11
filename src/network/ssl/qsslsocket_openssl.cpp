@@ -236,7 +236,8 @@ static int q_X509Callback(int ok, X509_STORE_CTX *ctx)
 {
     if (!ok) {
         // Store the error and at which depth the error was detected.
-        _q_sslErrorList()->errors << qMakePair<int, int>(ctx->error, ctx->error_depth);
+		if ((ctx->error_depth != 0) || (ctx->error != X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) || (ctx->param->purpose != 0) || (ctx->param->trust != 0))
+	        _q_sslErrorList()->errors << qMakePair<int, int>(ctx->error, ctx->error_depth);
     }
     // Always return OK to allow verification to continue. We're handle the
     // errors gracefully after collecting all errors, after verification has
