@@ -48,7 +48,7 @@
 // The buffer size need to be 0 otherwise data could be
 // lost if the socket that has written data closes the connection
 // before it is read.  Pipewriter is used for write buffering.
-#define BUFSIZE 0
+#define BUFSIZE 4096
 
 // ###: This should be a property. Should replace the insane 50 on unix as well.
 #define SYSTEM_MAX_PENDING_SOCKETS 8
@@ -187,8 +187,10 @@ void QLocalServerPrivate::closeServer()
     connectionEventNotifier->deleteLater();
     connectionEventNotifier = 0;
     CloseHandle(eventHandle);
-    for (int i = 0; i < listeners.size(); ++i)
+    for (int i = 0; i < listeners.size(); ++i) {
+		FlushFileBuffers(listeners[i].handle);
         CloseHandle(listeners[i].handle);
+	}
     listeners.clear();
 }
 
