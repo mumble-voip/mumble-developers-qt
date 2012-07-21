@@ -316,10 +316,6 @@ qpa {
                 kernel/qcocoaapplicationdelegate_mac_p.h \
                 kernel/qeventdispatcher_mac_p.h
 
-        MENU_NIB.files = mac/qt_menu.nib
-        MENU_NIB.path = Resources
-        MENU_NIB.version = Versions
-        QMAKE_BUNDLE_DATA += MENU_NIB
         RESOURCES += mac/macresources.qrc
 
         LIBS_PRIVATE += -framework AppKit

@@ -43,6 +43,8 @@
 #ifdef QT_MAC_USE_COCOA
 #include <qaction.h>
 #include <qcoreapplication.h>
+#include <QtCore/qcoreapplication.h>
+#include <QtCore/qdir.h>
 #include <private/qcocoamenuloader_mac_p.h>
 #include <private/qapplication_p.h>
 #include <private/qt_mac_p.h>
@@ -53,11 +55,58 @@
 QT_FORWARD_DECLARE_CLASS(QCFString)
 QT_FORWARD_DECLARE_CLASS(QString)
 
+QT_BEGIN_NAMESPACE
+
 #ifndef QT_NO_TRANSLATION
-    QT_BEGIN_NAMESPACE
     extern QString qt_mac_applicationmenu_string(int type);
-    QT_END_NAMESPACE
 #endif
+
+/*
+    Loads and instantiates the main app menu from the menu nib file(s).
+
+    The main app menu contains the Quit, Hide  About, Preferences entries, and
+    The reason for having the nib file is that those can not be created
+    programmatically. To ease deployment the nib files are stored in Qt resources
+    and written to QDir::temp() before loading. (Earlier Qt versions used
+    to require having the nib file in the QtGui framework.)
+*/
+void qt_mac_loadMenuNib(QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *qtMenuLoader)
+{
+    // Create qt_menu.nib dir in temp.
+    QDir temp = QDir::temp();
+    temp.mkdir("qt_menu.nib");
+    QString nibDir = temp.canonicalPath() + QLatin1String("/") + QLatin1String("qt_menu.nib/");
+    if (!QDir(nibDir).exists()) {
+        qWarning("qt_mac_loadMenuNib: could not create nib directory in temp");
+        return;
+    }
+
+    // Copy nib files from resources to temp.
+    QDir nibResource(":/trolltech/mac/qt_menu.nib");
+    if (!nibResource.exists()) {
+        qWarning("qt_mac_loadMenuNib: could not load nib from resources");
+        return;
+    }
+    foreach (const QFileInfo &file, nibResource.entryInfoList()) {
+        QFile::copy(file.absoluteFilePath(), nibDir + QLatin1String("/") + file.fileName());
+    }
+
+    // Load and instantiate nib file from temp
+    NSString *nibDirPath = [const_cast<NSString *>(reinterpret_cast<const NSString *>(QCFString::toCFStringRef(nibDir))) autorelease];
+    NSURL *nibUrl = [NSURL fileURLWithPath : nibDirPath];
+    NSNib *nib = [[NSNib alloc] initWithContentsOfURL : nibUrl];
+    [nib autorelease];
+    if(!nib) {
+        qWarning("qt_mac_loadMenuNib: could not load nib from temp");
+        return;
+    }
+    bool ok = [nib instantiateNibWithOwner : qtMenuLoader topLevelObjects : nil];
+    if (!ok) {
+        qWarning("qt_mac_loadMenuNib: could not instantiate nib");
+    }
+}
+
+QT_END_NAMESPACE
 
 QT_USE_NAMESPACE
 

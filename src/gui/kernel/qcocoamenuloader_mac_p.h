@@ -92,5 +92,11 @@
 - (BOOL)validateMenuItem:(NSMenuItem*)menuItem;
 @end
 
+QT_BEGIN_NAMESPACE
+
+void qt_mac_loadMenuNib(QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *qtMenuLoader);
+
+QT_END_NAMESPACE
+
 #endif // QT_MAC_USE_COCOA
 #endif // QCOCOAMENULOADER_P_H

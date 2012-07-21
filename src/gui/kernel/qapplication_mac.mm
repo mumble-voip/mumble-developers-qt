@@ -1257,12 +1257,7 @@ void qt_init(QApplicationPrivate *priv, int)
         [cocoaApp setDelegate:newDelegate];
 
         QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *qtMenuLoader = [[QT_MANGLE_NAMESPACE(QCocoaMenuLoader) alloc] init];
-        if ([NSBundle loadNibNamed:@"qt_menu" owner:qtMenuLoader] == false) {
-            qFatal("Qt internal error: qt_menu.nib could not be loaded. The .nib file"
-                   " should be placed in QtGui.framework/Versions/Current/Resources/ "
-                   " or in the resources directory of your application bundle.");
-        }
-
+        qt_mac_loadMenuNib(qtMenuLoader);
         [cocoaApp setMenu:[qtMenuLoader menu]];
         [newDelegate setMenuLoader:qtMenuLoader];
         [qtMenuLoader release];
