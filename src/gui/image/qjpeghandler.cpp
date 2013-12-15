@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -157,11 +157,7 @@ static boolean qt_fill_input_buffer(j_decompress_ptr cinfo)
     } else {
         src->bytes_in_buffer = num_read;
     }
-#if defined(Q_OS_UNIXWARE)
-    return B_TRUE;
-#else
-    return true;
-#endif
+    return TRUE;
 }
 
 static void qt_skip_input_data(j_decompress_ptr cinfo, long num_bytes)
@@ -489,11 +485,7 @@ static boolean qt_empty_output_buffer(j_compress_ptr cinfo)
     dest->next_output_byte = dest->buffer;
     dest->free_in_buffer = max_buf;
 
-#if defined(Q_OS_UNIXWARE)
-    return B_TRUE;
-#else
-    return true;
-#endif
+    return TRUE;
 }
 
 static void qt_term_destination(j_compress_ptr cinfo)
@@ -584,13 +576,8 @@ static bool write_jpeg_image(const QImage &image, QIODevice *device, int sourceQ
 
 
         int quality = sourceQuality >= 0 ? qMin(sourceQuality,100) : 75;
-#if defined(Q_OS_UNIXWARE)
-        jpeg_set_quality(&cinfo, quality, B_TRUE /* limit to baseline-JPEG values */);
-        jpeg_start_compress(&cinfo, B_TRUE);
-#else
-        jpeg_set_quality(&cinfo, quality, true /* limit to baseline-JPEG values */);
-        jpeg_start_compress(&cinfo, true);
-#endif
+        jpeg_set_quality(&cinfo, quality, TRUE /* limit to baseline-JPEG values */);
+        jpeg_start_compress(&cinfo, TRUE);
 
         row_pointer[0] = new uchar[cinfo.image_width*cinfo.input_components];
         int w = cinfo.image_width;
@@ -751,11 +738,7 @@ bool QJpegHandlerPrivate::readJpegHeader(QIODevice *device)
         err.error_exit = my_error_exit;
 
         if (!setjmp(err.setjmp_buffer)) {
-    #if defined(Q_OS_UNIXWARE)
-            (void) jpeg_read_header(&info, B_TRUE);
-    #else
-            (void) jpeg_read_header(&info, true);
-    #endif
+            (void) jpeg_read_header(&info, TRUE);
 
             int width = 0;
             int height = 0;

@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -57,6 +57,24 @@
 #ifndef QT_NO_DBUS
 
 QT_BEGIN_NAMESPACE
+
+
+QDBusArgument &operator<<(QDBusArgument &argument, const ConnmanMap &map)
+{
+    argument.beginStructure();
+    argument << map.objectPath << map.propertyMap;
+    argument.endStructure();
+    return argument;
+}
+
+const QDBusArgument &operator>>(const QDBusArgument &argument, ConnmanMap &map)
+{
+    argument.beginStructure();
+    argument >> map.objectPath >> map.propertyMap;
+    argument.endStructure();
+    return argument;
+}
+
 static QDBusConnection dbusConnection = QDBusConnection::systemBus();
 
 
@@ -66,6 +84,9 @@ QConnmanManagerInterface::QConnmanManagerInterface( QObject *parent)
                                  CONNMAN_MANAGER_INTERFACE,
                                  QDBusConnection::systemBus(), parent)
 {
+    qDBusRegisterMetaType<ConnmanMap>();
+    qDBusRegisterMetaType<ConnmanMapList>();
+    qRegisterMetaType<ConnmanMapList>("ConnmanMapList");
 }
 
 QConnmanManagerInterface::~QConnmanManagerInterface()
@@ -297,14 +318,38 @@ QStringList QConnmanManagerInterface::getProfiles()
 
 QStringList QConnmanManagerInterface::getTechnologies()
 {
-    QVariant var = getProperty("Technologies");
-    return qdbus_cast<QStringList >(var);
+    QStringList list;
+    QDBusReply<ConnmanMapList> replyList = this->call(QLatin1String("GetTechnologies"));
+    if (replyList.isValid()) {
+        Q_FOREACH (ConnmanMap map, replyList.value()) {
+            list << map.objectPath.path();
+        }
+    } else {
+        // try for older version
+        QVariant var = getProperty("Technologies");
+        if (!var.isNull()) {
+            list = qdbus_cast<QStringList>(var);
+        }
+    }
+    return list;
 }
 
 QStringList QConnmanManagerInterface::getServices()
 {
-    QVariant var = getProperty("Services");
-    return qdbus_cast<QStringList >(var);
+    QStringList list;
+    QDBusReply<ConnmanMapList> replyList = this->call(QLatin1String("GetServices"));
+    if (replyList.isValid()) {
+        Q_FOREACH (ConnmanMap map, replyList.value()) {
+            list << map.objectPath.path();
+        }
+    } else {
+        // try for older version
+        QVariant var = getProperty("Services");
+        if (!var.isNull()) {
+            list = qdbus_cast<QStringList>(var);
+        }
+    }
+    return list;
 }
 
 QString QConnmanManagerInterface::getPathForTechnology(const QString &name)
@@ -361,7 +406,7 @@ QVariant QConnmanProfileInterface::getProperty(const QString &property)
     QVariantMap map = getProperties();
     if (map.contains(property)) {
         var = map.value(property);
-    } 
+    }
     return var;
 }
 
@@ -446,7 +491,7 @@ QVariant QConnmanServiceInterface::getProperty(const QString &property)
     QVariantMap map = getProperties();
     if (map.contains(property)) {
         var = map.value(property);
-    } 
+    }
     return var;
 }
 

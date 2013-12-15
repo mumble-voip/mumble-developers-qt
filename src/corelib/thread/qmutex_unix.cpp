@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -56,7 +56,7 @@
 #if defined(Q_OS_MAC)
 # include <mach/mach.h>
 # include <mach/task.h>
-#elif defined(Q_OS_LINUX)
+#elif defined(Q_OS_LINUX) && !defined(QT_LINUXBASE)
 # include <linux/futex.h>
 # include <sys/syscall.h>
 # include <unistd.h>
@@ -65,7 +65,7 @@
 
 QT_BEGIN_NAMESPACE
 
-#if !defined(Q_OS_LINUX)
+#if !defined(Q_OS_LINUX) || defined(QT_LINUXBASE)
 static void report_error(int code, const char *where, const char *what)
 {
     if (code != 0)
@@ -77,7 +77,7 @@ static void report_error(int code, const char *where, const char *what)
 QMutexPrivate::QMutexPrivate(QMutex::RecursionMode mode)
     : QMutexData(mode), maximumSpinTime(MaximumSpinTimeThreshold), averageWaitTime(0), owner(0), count(0)
 {
-#if !defined(Q_OS_LINUX)
+#if !defined(Q_OS_LINUX) || defined(QT_LINUXBASE)
     wakeup = false;
     report_error(pthread_mutex_init(&mutex, NULL), "QMutex", "mutex init");
     report_error(pthread_cond_init(&cond, NULL), "QMutex", "cv init");
@@ -86,13 +86,13 @@ QMutexPrivate::QMutexPrivate(QMutex::RecursionMode mode)
 
 QMutexPrivate::~QMutexPrivate()
 {
-#if !defined(Q_OS_LINUX)
+#if !defined(Q_OS_LINUX) || defined(QT_LINUXBASE)
     report_error(pthread_cond_destroy(&cond), "QMutex", "cv destroy");
     report_error(pthread_mutex_destroy(&mutex), "QMutex", "mutex destroy");
 #endif
 }
 
-#if defined(Q_OS_LINUX)
+#if defined(Q_OS_LINUX) && !defined(QT_LINUXBASE)
 
 static inline int _q_futex(volatile int *addr, int op, int val, const struct timespec *timeout, int *addr2, int val2)
 {
@@ -136,7 +136,7 @@ void QMutexPrivate::wakeUp()
     (void) _q_futex(&contenders._q_value, FUTEX_WAKE, 1, 0, 0, 0);
 }
 
-#else // !Q_OS_LINUX
+#else // !Q_OS_LINUX || QT_LINUXBASE
 
 bool QMutexPrivate::wait(int timeout)
 {
@@ -183,7 +183,7 @@ void QMutexPrivate::wakeUp()
     report_error(pthread_mutex_unlock(&mutex), "QMutex::unlock", "mutex unlock");
 }
 
-#endif // !Q_OS_LINUX
+#endif // !Q_OS_LINUX || QT_LINUXBASE
 
 QT_END_NAMESPACE
 

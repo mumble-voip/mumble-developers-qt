@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtDeclarative module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -55,6 +55,11 @@
 
 #include <QtCore/qglobal.h>
 #include <QtCore/qvariant.h>
+#include <QtCore/qurl.h>
+#include <QtDeclarative/QDeclarativeListProperty>
+#include <QtDeclarative/QDeclarativeParserStatus>
+#include <QtDeclarative/QDeclarativePropertyValueSource>
+#include <QtDeclarative/QDeclarativePropertyValueInterceptor>
 
 QT_BEGIN_HEADER
 
@@ -233,13 +238,93 @@ namespace QDeclarativePrivate
         AutoParentFunction function;
     };
 
+    struct RegisterComponent {
+        const QUrl &url;
+        const char *uri;
+        const char *typeName;
+        int majorVersion;
+        int minorVersion;
+    };
+
     enum RegistrationType {
         TypeRegistration       = 0, 
         InterfaceRegistration  = 1,
-        AutoParentRegistration = 2
+        AutoParentRegistration = 2,
+        ComponentRegistration  = 3
     };
 
     int Q_DECLARATIVE_EXPORT qmlregister(RegistrationType, void *);
+
+
+    /*!
+      \internal
+      \fn int qmlRegisterType(const char *url, const char *uri, int versionMajor, int versionMinor, const char *qmlName);
+      \relates QDeclarativeEngine
+
+      This function registers a type in the QML system with the name \a qmlName, in the library imported from \a uri having the
+      version number composed from \a versionMajor and \a versionMinor. The type is defined by the QML file located at \a url.
+
+      Normally QML files can be loaded as types directly from other QML files, or using a qmldir file. This function allows
+      registration of files to types from a C++ module, such as when the type mapping needs to be procedurally determined at startup.
+
+      Returns non-zero if the registration was sucessful.
+
+      This function is added to QtQuick 1 in Qt 5, and is here as private API for developers needing compatibility.
+    */
+    inline int qmlRegisterType(const QUrl &url, const char *uri, int versionMajor, int versionMinor, const char *qmlName)
+    {
+        RegisterComponent type = {
+            url,
+            uri,
+            qmlName,
+            versionMajor,
+            versionMinor
+        };
+
+        return qmlregister(QDeclarativePrivate::ComponentRegistration, &type);
+    }
+    /*!
+      \internal
+      \fn int qmlRegisterUncreatableType(const char *url, const char *uri, int versionMajor, int versionMinor, const char *qmlName);
+      \relates QDeclarativeEngine
+
+      This overload is backported from Qt5, and allows uncreatable types to be versioned.
+  */
+    template<typename T, int metaObjectRevision>
+    int qmlRegisterUncreatableType(const char *uri, int versionMajor, int versionMinor, const char *qmlName, const QString& reason)
+    {
+        QByteArray name(T::staticMetaObject.className());
+
+        QByteArray pointerName(name + '*');
+        QByteArray listName("QDeclarativeListProperty<" + name + ">");
+
+        QDeclarativePrivate::RegisterType type = {
+            1,
+
+            qRegisterMetaType<T *>(pointerName.constData()),
+            qRegisterMetaType<QDeclarativeListProperty<T> >(listName.constData()),
+            0, 0,
+            reason,
+
+            uri, versionMajor, versionMinor, qmlName, &T::staticMetaObject,
+
+            QDeclarativePrivate::attachedPropertiesFunc<T>(),
+            QDeclarativePrivate::attachedPropertiesMetaObject<T>(),
+
+            QDeclarativePrivate::StaticCastSelector<T,QDeclarativeParserStatus>::cast(),
+            QDeclarativePrivate::StaticCastSelector<T,QDeclarativePropertyValueSource>::cast(),
+            QDeclarativePrivate::StaticCastSelector<T,QDeclarativePropertyValueInterceptor>::cast(),
+
+            0, 0,
+
+            0,
+            metaObjectRevision
+        };
+
+        return QDeclarativePrivate::qmlregister(QDeclarativePrivate::TypeRegistration, &type);
+    }
+
+
 }
 
 QT_END_NAMESPACE

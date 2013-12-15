@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtDeclarative module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -483,10 +483,6 @@ void QDeclarativeMouseArea::mousePressEvent(QGraphicsSceneMouseEvent *event)
     else {
         d->longPress = false;
         d->saveEvent(event);
-        if (d->drag) {
-            d->dragX = drag()->axis() & QDeclarativeDrag::XAxis;
-            d->dragY = drag()->axis() & QDeclarativeDrag::YAxis;
-        }
         if (d->drag)
             d->drag->setActive(false);
         setHovered(true);
@@ -533,34 +529,32 @@ void QDeclarativeMouseArea::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
             curLocalPos = event->scenePos();
         }
 
-        const int dragThreshold = QApplication::startDragDistance();
-        qreal dx = qAbs(curLocalPos.x() - startLocalPos.x());
-        qreal dy = qAbs(curLocalPos.y() - startLocalPos.y());
-
         if (keepMouseGrab() && d->stealMouse)
             d->drag->setActive(true);
 
-        if (d->dragX && d->drag->active()) {
-            qreal x = (curLocalPos.x() - startLocalPos.x()) + d->startX;
-            if (x < drag()->xmin())
-                x = drag()->xmin();
-            else if (x > drag()->xmax())
-                x = drag()->xmax();
-            drag()->target()->setX(x);
-        }
-        if (d->dragY && d->drag->active()) {
-            qreal y = (curLocalPos.y() - startLocalPos.y()) + d->startY;
-            if (y < drag()->ymin())
-                y = drag()->ymin();
-            else if (y > drag()->ymax())
-                y = drag()->ymax();
-            drag()->target()->setY(y);
+        bool dragX = drag()->axis() & QDeclarativeDrag::XAxis;
+        bool dragY = drag()->axis() & QDeclarativeDrag::YAxis;
+
+        const qreal x = dragX
+                ? qBound(d->drag->xmin(), d->startX + curLocalPos.x() - startLocalPos.x(), d->drag->xmax())
+                : d->startX;
+        const qreal y = dragY
+                ? qBound(d->drag->ymin(), d->startY + curLocalPos.y() - startLocalPos.y(), d->drag->ymax())
+                : d->startY;
+
+        if (d->drag->active()) {
+            if (dragX && dragY)
+                d->drag->target()->setPos(x, y);
+            else if (dragX)
+                d->drag->target()->setX(x);
+            else if (dragY)
+                d->drag->target()->setY(y);
         }
 
         if (!keepMouseGrab()) {
-            if ((!d->dragY && dy < dragThreshold && d->dragX && dx > dragThreshold)
-                || (!d->dragX && dx < dragThreshold && d->dragY && dy > dragThreshold)
-                || (d->dragX && d->dragY && (dx > dragThreshold || dy > dragThreshold))) {
+            const int dragThreshold = QApplication::startDragDistance();
+
+            if (qAbs(x - d->startX) > dragThreshold || qAbs(y - d->startY) > dragThreshold) {
                 setKeepMouseGrab(true);
                 d->stealMouse = true;
             }

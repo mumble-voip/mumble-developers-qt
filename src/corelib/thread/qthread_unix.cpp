@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -83,15 +83,19 @@
 #   define old_qDebug qDebug
 #   undef qDebug
 # endif
-#ifndef QT_NO_CORESERVICES
+#if !defined(Q_OS_IOS)
 # include <CoreServices/CoreServices.h>
-#endif //QT_NO_CORESERVICES
+#endif // !defined(Q_OS_IOS)
 
 # ifdef old_qDebug
 #   undef qDebug
 #   define qDebug QT_NO_QDEBUG_MACRO
 #   undef old_qDebug
 # endif
+#endif
+
+#if defined(Q_OS_LINUX) && !defined(QT_LINUXBASE)
+#include <sys/prctl.h>
 #endif
 
 #if defined(Q_OS_LINUX) && !defined(SCHED_IDLE)
@@ -167,6 +171,12 @@ static void destroy_current_thread_data_key()
 {
     pthread_once(&current_thread_data_once, create_current_thread_data_key);
     pthread_key_delete(current_thread_data_key);
+
+    // Reset current_thread_data_once in case we end up recreating
+    // the thread-data in the rare case of QObject construction
+    // after destroying the QThreadData.
+    pthread_once_t pthread_once_init = PTHREAD_ONCE_INIT;
+    current_thread_data_once = pthread_once_init;
 }
 Q_DESTRUCTOR_FUNCTION(destroy_current_thread_data_key)
 
@@ -197,6 +207,11 @@ static void clear_thread_data()
     currentThreadData = 0;
 #endif
     pthread_setspecific(current_thread_data_key, 0);
+}
+
+void QThreadData::clearCurrentThreadData()
+{
+    clear_thread_data();
 }
 
 QThreadData *QThreadData::current()
@@ -276,6 +291,22 @@ void QThreadPrivate::createEventDispatcher(QThreadData *data)
 
 #ifndef QT_NO_THREAD
 
+#if (defined(Q_OS_LINUX) || (defined(Q_OS_MAC) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6) || defined(Q_OS_QNX))
+static void setCurrentThreadName(pthread_t threadId, const char *name)
+{
+#  if defined(Q_OS_LINUX) && !defined(QT_LINUXBASE)
+    Q_UNUSED(threadId);
+    prctl(PR_SET_NAME, (unsigned long)name, 0, 0, 0);
+#  elif (defined(Q_OS_MAC) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6)
+    Q_UNUSED(threadId);
+    if (QSysInfo::MacintoshVersion >= QSysInfo::MV_10_6)
+        pthread_setname_np(name);
+#  elif defined(Q_OS_QNX)
+    pthread_setname_np(threadId, name);
+#  endif
+}
+#endif
+
 void *QThreadPrivate::start(void *arg)
 {
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
@@ -300,6 +331,17 @@ void *QThreadPrivate::start(void *arg)
 
     // ### TODO: allow the user to create a custom event dispatcher
     createEventDispatcher(data);
+
+#if (defined(Q_OS_LINUX) || (defined(Q_OS_MAC) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6) || defined(Q_OS_QNX))
+    // sets the name of the current thread.
+    QString objectName = thr->objectName();
+
+    if (Q_LIKELY(objectName.isEmpty()))
+        setCurrentThreadName(thr->d_func()->thread_id, thr->metaObject()->className());
+    else
+        setCurrentThreadName(thr->d_func()->thread_id, objectName.toLocal8Bit());
+
+#endif
 
     emit thr->started();
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
@@ -396,7 +438,13 @@ int QThread::idealThreadCount()
     // IRIX
     cores = (int)sysconf(_SC_NPROC_ONLN);
 #elif defined(Q_OS_INTEGRITY)
-    // as of aug 2008 Integrity only supports one single core CPU
+#if (__INTEGRITY_MAJOR_VERSION >= 10)
+    // Integrity V10+ does support multicore CPUs
+    Value processorCount;
+    if (GetProcessorCount(CurrentTask(), &processorCount) == 0)
+        cores = processorCount;
+    else
+#endif
     cores = 1;
 #elif defined(Q_OS_VXWORKS)
     // VxWorks
@@ -505,8 +553,20 @@ static bool calculateUnixPriority(int priority, int *sched_policy, int *sched_pr
 #endif
     const int highestPriority = QThread::TimeCriticalPriority;
 
-    int prio_min = sched_get_priority_min(*sched_policy);
-    int prio_max = sched_get_priority_max(*sched_policy);
+    int prio_min;
+    int prio_max;
+#if defined(Q_OS_VXWORKS) && defined(VXWORKS_DKM)
+    // for other scheduling policies than SCHED_RR or SCHED_FIFO
+    prio_min = SCHED_FIFO_LOW_PRI;
+    prio_max = SCHED_FIFO_HIGH_PRI;
+
+    if ((*sched_policy == SCHED_RR) || (*sched_policy == SCHED_FIFO))
+#endif
+    {
+    prio_min = sched_get_priority_min(*sched_policy);
+    prio_max = sched_get_priority_max(*sched_policy);
+    }
+
     if (prio_min == -1 || prio_max == -1)
         return false;
 

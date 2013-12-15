@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -56,6 +56,22 @@
 #ifndef QT_NO_BEARERMANAGEMENT
 #ifndef QT_NO_DBUS
 
+QDBusArgument &operator<<(QDBusArgument &argument, const ObjectPathProperties &item)
+{
+    argument.beginStructure();
+    argument << item.path << item.properties;
+    argument.endStructure();
+    return argument;
+}
+
+const QDBusArgument &operator>>(const QDBusArgument &argument, ObjectPathProperties &item)
+{
+    argument.beginStructure();
+    argument >> item.path >> item.properties;
+    argument.endStructure();
+    return argument;
+}
+
 QT_BEGIN_NAMESPACE
 static QDBusConnection dbusConnection = QDBusConnection::systemBus();
 
@@ -66,6 +82,8 @@ QOfonoManagerInterface::QOfonoManagerInterface( QObject *parent)
                                  OFONO_MANAGER_INTERFACE,
                                  QDBusConnection::systemBus(), parent)
 {
+    qDBusRegisterMetaType<ObjectPathProperties>();
+    qDBusRegisterMetaType<PathPropertiesList>();
 }
 
 QOfonoManagerInterface::~QOfonoManagerInterface()
@@ -74,16 +92,24 @@ QOfonoManagerInterface::~QOfonoManagerInterface()
 
 QList <QDBusObjectPath> QOfonoManagerInterface::getModems()
 {
-    QVariant var = getProperty("Modems");
-    return qdbus_cast<QList<QDBusObjectPath> >(var);
+    QList <QDBusObjectPath> modemList;
+    QList<QVariant> argumentList;
+    QDBusReply<PathPropertiesList > reply = this->asyncCallWithArgumentList(QLatin1String("GetModems"), argumentList);
+    if (reply.isValid()) {
+        foreach (ObjectPathProperties modem, reply.value()) {
+            modemList << modem.path;
+        }
+    }
+
+    return modemList;
 }
 
 QDBusObjectPath QOfonoManagerInterface::currentModem()
 {
     QList<QDBusObjectPath> modems = getModems();
-    foreach(const QDBusObjectPath modem, modems) {
+    foreach (const QDBusObjectPath modem, modems) {
         QOfonoModemInterface device(modem.path());
-        if(device.isPowered() && device.isOnline())
+        if (device.isPowered() && device.isOnline())
         return modem;;
     }
     return QDBusObjectPath();
@@ -93,7 +119,7 @@ QDBusObjectPath QOfonoManagerInterface::currentModem()
 void QOfonoManagerInterface::connectNotify(const char *signal)
 {
 if (QLatin1String(signal) == SIGNAL(propertyChanged(QString,QDBusVariant))) {
-        if(!connection().connect(QLatin1String(OFONO_SERVICE),
+        if (!connection().connect(QLatin1String(OFONO_SERVICE),
                                QLatin1String(OFONO_MANAGER_PATH),
                                QLatin1String(OFONO_MANAGER_INTERFACE),
                                QLatin1String("PropertyChanged"),
@@ -139,7 +165,7 @@ QVariant QOfonoManagerInterface::getProperty(const QString &property)
 QVariantMap QOfonoManagerInterface::getProperties()
 {
     QDBusReply<QVariantMap > reply = this->call(QLatin1String("GetProperties"));
-    if(reply.isValid())
+    if (reply.isValid())
         return reply.value();
     else
         return QVariantMap();
@@ -233,7 +259,7 @@ QStringList QOfonoModemInterface::getInterfaces()
 
 QString QOfonoModemInterface::defaultInterface()
 {
-    foreach(const QString &modem,getInterfaces()) {
+    foreach (const QString &modem,getInterfaces()) {
      return modem;
     }
     return QString();
@@ -243,7 +269,7 @@ QString QOfonoModemInterface::defaultInterface()
 void QOfonoModemInterface::connectNotify(const char *signal)
 {
     if (QLatin1String(signal) == SIGNAL(propertyChanged(QString,QDBusVariant))) {
-            if(!connection().connect(QLatin1String(OFONO_SERVICE),
+            if (!connection().connect(QLatin1String(OFONO_SERVICE),
                                    this->path(),
                                    QLatin1String(OFONO_MODEM_INTERFACE),
                                    QLatin1String("PropertyChanged"),
@@ -359,14 +385,22 @@ QString QOfonoNetworkRegistrationInterface::getBaseStation()
 
 QList <QDBusObjectPath> QOfonoNetworkRegistrationInterface::getOperators()
 {
-    QVariant var = getProperty("Operators");
-    return qdbus_cast<QList <QDBusObjectPath> >(var);
+    QList <QDBusObjectPath> operatorList;
+    QList<QVariant> argumentList;
+    QDBusReply<PathPropertiesList > reply = this->asyncCallWithArgumentList(QLatin1String("GetOperators"),
+                                                                                argumentList);
+    if (reply.isValid()) {
+        foreach (ObjectPathProperties netop, reply.value()) {
+            operatorList << netop.path;
+        }
+    }
+    return operatorList;
 }
 
 void QOfonoNetworkRegistrationInterface::connectNotify(const char *signal)
 {
 if (QLatin1String(signal) == SIGNAL(propertyChanged(QString,QDBusVariant))) {
-        if(!connection().connect(QLatin1String(OFONO_SERVICE),
+        if (!connection().connect(QLatin1String(OFONO_SERVICE),
                                this->path(),
                                QLatin1String(OFONO_NETWORK_REGISTRATION_INTERFACE),
                                QLatin1String("PropertyChanged"),
@@ -464,7 +498,7 @@ QStringList QOfonoNetworkOperatorInterface::getTechnologies()
 void QOfonoNetworkOperatorInterface::connectNotify(const char *signal)
 {
 if (QLatin1String(signal) == SIGNAL(propertyChanged(QString,QDBusVariant))) {
-        if(!connection().connect(QLatin1String(OFONO_SERVICE),
+        if (!connection().connect(QLatin1String(OFONO_SERVICE),
                                this->path(),
                                QLatin1String(OFONO_NETWORK_OPERATOR_INTERFACE),
                                QLatin1String("PropertyChanged"),
@@ -567,7 +601,7 @@ QString QOfonoSimInterface::cardIdentifier()
 void QOfonoSimInterface::connectNotify(const char *signal)
 {
 if (QLatin1String(signal) == SIGNAL(propertyChanged(QString,QDBusVariant))) {
-        if(!connection().connect(QLatin1String(OFONO_SERVICE),
+        if (!connection().connect(QLatin1String(OFONO_SERVICE),
                                this->path(),
                                QLatin1String(OFONO_SIM_MANAGER_INTERFACE),
                                QLatin1String("PropertyChanged"),
@@ -631,8 +665,16 @@ QOfonoDataConnectionManagerInterface::~QOfonoDataConnectionManagerInterface()
 
 QList<QDBusObjectPath> QOfonoDataConnectionManagerInterface::getPrimaryContexts()
 {
-    QVariant var = getProperty("PrimaryContexts");
-    return qdbus_cast<QList<QDBusObjectPath> >(var);
+    QList <QDBusObjectPath> contextList;
+    QList<QVariant> argumentList;
+    QDBusReply<PathPropertiesList > reply = this->asyncCallWithArgumentList(QLatin1String("GetContexts"),
+                                                                         argumentList);
+    if (reply.isValid()) {
+        foreach (ObjectPathProperties context, reply.value()) {
+            contextList << context.path;
+        }
+    }
+    return contextList;
 }
 
 bool QOfonoDataConnectionManagerInterface::isAttached()
@@ -656,7 +698,7 @@ bool QOfonoDataConnectionManagerInterface::isPowered()
 void QOfonoDataConnectionManagerInterface::connectNotify(const char *signal)
 {
 if (QLatin1String(signal) == SIGNAL(propertyChanged(QString,QDBusVariant))) {
-        if(!connection().connect(QLatin1String(OFONO_SERVICE),
+        if (!connection().connect(QLatin1String(OFONO_SERVICE),
                                this->path(),
                                QLatin1String(OFONO_DATA_CONNECTION_MANAGER_INTERFACE),
                                QLatin1String("PropertyChanged"),
@@ -775,7 +817,7 @@ bool QOfonoPrimaryDataContextInterface::setApn(const QString &name)
 void QOfonoPrimaryDataContextInterface::connectNotify(const char *signal)
 {
 if (QLatin1String(signal) == SIGNAL(propertyChanged(QString,QDBusVariant))) {
-        if(!connection().connect(QLatin1String(OFONO_SERVICE),
+        if (!connection().connect(QLatin1String(OFONO_SERVICE),
                                this->path(),
                                QLatin1String(OFONO_DATA_CONTEXT_INTERFACE),
                                QLatin1String("PropertyChanged"),
@@ -834,7 +876,7 @@ bool QOfonoPrimaryDataContextInterface::setProp(const QString &property, const Q
                                                     QLatin1String("SetProperty"),
                                                     args);
     bool ok = true;
-    if(reply.type() != QDBusMessage::ReplyMessage) {
+    if (reply.type() != QDBusMessage::ReplyMessage) {
         qWarning() << reply.errorMessage();
         ok = false;
     }
@@ -857,7 +899,7 @@ QOfonoSmsInterface::~QOfonoSmsInterface()
 void QOfonoSmsInterface::connectNotify(const char *signal)
 {
     if (QLatin1String(signal) == SIGNAL(propertyChanged(QString,QDBusVariant))) {
-        if(!connection().connect(QLatin1String(OFONO_SERVICE),
+        if (!connection().connect(QLatin1String(OFONO_SERVICE),
                                  this->path(),
                                  QLatin1String(OFONO_SMS_MANAGER_INTERFACE),
                                  QLatin1String("PropertyChanged"),
@@ -882,7 +924,7 @@ void QOfonoSmsInterface::connectNotify(const char *signal)
     }
 
     if (QLatin1String(signal) == SIGNAL(immediateMessage(QString,QVariantMap))) {
-        if(!connection().connect(QLatin1String(OFONO_SERVICE),
+        if (!connection().connect(QLatin1String(OFONO_SERVICE),
                                  this->path(),
                                  QLatin1String(OFONO_SMS_MANAGER_INTERFACE),
                                  QLatin1String("ImmediateMessage"),
@@ -892,7 +934,7 @@ void QOfonoSmsInterface::connectNotify(const char *signal)
     }
 
     if (QLatin1String(signal) == SIGNAL(incomingMessage(QString,QVariantMap))) {
-        if(!connection().connect(QLatin1String(OFONO_SERVICE),
+        if (!connection().connect(QLatin1String(OFONO_SERVICE),
                                  this->path(),
                                  QLatin1String(OFONO_SMS_MANAGER_INTERFACE),
                                  QLatin1String("IncomingMessage"),
@@ -932,11 +974,8 @@ void QOfonoSmsInterface::sendMessage(const QString &to, const QString &message)
     QDBusReply<QString> reply =  this->call(QLatin1String("SendMessage"),
                                             QVariant::fromValue(to),
                                             QVariant::fromValue(message));
-    bool ok = true;
-    if(reply.error().type() == QDBusError::InvalidArgs) {
+    if (reply.error().type() == QDBusError::InvalidArgs)
         qWarning() << reply.error().message();
-        ok = false;
-    }
 }
 
 QT_END_NAMESPACE

@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtDeclarative module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -61,7 +61,7 @@ is responsible for deleting the returned data.
 */
 static QSet<QString> *qmlFilesInDirectory(const QString &path)
 {
-    QDirIterator dir(path, QDir::Files);
+    QDirIterator dir(path, QDir::Files | QDir::NoDotAndDotDot);
     if (!dir.hasNext())
         return 0;
     QSet<QString> *files = new QSet<QString>;
@@ -552,21 +552,28 @@ void QDeclarativeDataLoader::load(QDeclarativeDataBlob *blob)
 
         blob->m_manager = this;
         QNetworkReply *reply = m_engine->networkAccessManager()->get(QNetworkRequest(blob->m_url));
-        QObject::connect(reply, SIGNAL(downloadProgress(qint64,qint64)), 
-                         this, SLOT(networkReplyProgress(qint64,qint64)));
-        QObject::connect(reply, SIGNAL(finished()), 
-                         this, SLOT(networkReplyFinished()));
-        m_networkReplies.insert(reply, blob);
 
+        m_networkReplies.insert(reply, blob);
         blob->addref();
+
+        if (reply->isFinished()) {
+            // Short-circuit synchronous replies.
+            qint64 size = reply->size();
+            networkReplyProgress(reply, size, size);
+            networkReplyFinished(reply);
+        } else {
+            QObject::connect(reply, SIGNAL(downloadProgress(qint64,qint64)),
+                             this, SLOT(networkReplyProgress(qint64,qint64)));
+            QObject::connect(reply, SIGNAL(finished()),
+                             this, SLOT(networkReplyFinished()));
+        }
     }
 }
 
 #define DATALOADER_MAXIMUM_REDIRECT_RECURSION 16
 
-void QDeclarativeDataLoader::networkReplyFinished()
+void QDeclarativeDataLoader::networkReplyFinished(QNetworkReply *reply)
 {
-    QNetworkReply *reply = static_cast<QNetworkReply *>(sender());
     reply->deleteLater();
 
     QDeclarativeDataBlob *blob = m_networkReplies.take(reply);
@@ -598,9 +605,14 @@ void QDeclarativeDataLoader::networkReplyFinished()
     blob->release();
 }
 
-void QDeclarativeDataLoader::networkReplyProgress(qint64 bytesReceived, qint64 bytesTotal)
+void QDeclarativeDataLoader::networkReplyFinished()
 {
     QNetworkReply *reply = static_cast<QNetworkReply *>(sender());
+    networkReplyFinished(reply);
+}
+
+void QDeclarativeDataLoader::networkReplyProgress(QNetworkReply *reply, qint64 bytesReceived, qint64 bytesTotal)
+{
     QDeclarativeDataBlob *blob = m_networkReplies.value(reply);
 
     Q_ASSERT(blob);
@@ -609,6 +621,12 @@ void QDeclarativeDataLoader::networkReplyProgress(qint64 bytesReceived, qint64 b
         blob->m_progress = bytesReceived / bytesTotal;
         blob->downloadProgressChanged(blob->m_progress);
     }
+}
+
+void QDeclarativeDataLoader::networkReplyProgress(qint64 bytesReceived, qint64 bytesTotal)
+{
+    QNetworkReply *reply = static_cast<QNetworkReply *>(sender());
+    networkReplyProgress(reply, bytesReceived, bytesTotal);
 }
 
 /*!
@@ -1037,19 +1055,6 @@ void QDeclarativeTypeData::resolveTypes()
     QDeclarativeEnginePrivate *ep = QDeclarativeEnginePrivate::get(m_typeLoader->engine());
     QDeclarativeImportDatabase *importDatabase = &ep->importDatabase;
 
-    // For local urls, add an implicit import "." as first (most overridden) lookup. 
-    // This will also trigger the loading of the qmldir and the import of any native 
-    // types from available plugins.
-    if (QDeclarativeQmldirData *qmldir = qmldirForUrl(finalUrl().resolved(QUrl(QLatin1String("./qmldir"))))) {
-        m_imports.addImport(importDatabase, QLatin1String("."),
-                            QString(), -1, -1, QDeclarativeScriptParser::Import::File, 
-                            qmldir->dirComponents(), 0);
-    } else {
-        m_imports.addImport(importDatabase, QLatin1String("."), 
-                            QString(), -1, -1, QDeclarativeScriptParser::Import::File, 
-                            QDeclarativeDirComponents(), 0);
-    }
-
     foreach (const QDeclarativeScriptParser::Import &import, scriptParser.imports()) {
         QDeclarativeDirComponents qmldircomponentsnetwork;
         if (import.type == QDeclarativeScriptParser::Import::Script)
@@ -1089,6 +1094,7 @@ void QDeclarativeTypeData::resolveTypes()
         }
     }
 
+    bool implicitImportLoaded = false;
     foreach (QDeclarativeScriptParser::TypeReference *parserRef, scriptParser.referencedTypes()) {
         QByteArray typeName = parserRef->name.toUtf8();
 
@@ -1105,23 +1111,49 @@ void QDeclarativeTypeData::resolveTypes()
             // Known to not be a type:
             //  - known to be a namespace (Namespace {})
             //  - type with unknown namespace (UnknownNamespace.SomeType {})
-            QDeclarativeError error;
-            error.setUrl(m_imports.baseUrl());
-            QString userTypeName = parserRef->name;
-            userTypeName.replace(QLatin1Char('/'),QLatin1Char('.'));
-            if (typeNamespace)
-                error.setDescription(QDeclarativeTypeLoader::tr("Namespace %1 cannot be used as a type").arg(userTypeName));
-            else
-                error.setDescription(QDeclarativeTypeLoader::tr("%1 %2").arg(userTypeName).arg(errorString));
+            bool typeFound = false;
 
-            if (!parserRef->refObjects.isEmpty()) {
-                QDeclarativeParser::Object *obj = parserRef->refObjects.first();
-                error.setLine(obj->location.start.line);
-                error.setColumn(obj->location.start.column);
+            if (!typeNamespace && !implicitImportLoaded) {
+                implicitImportLoaded = true;
+                // For local urls, add an implicit import "." as most overridden lookup.
+                // This will also trigger the loading of the qmldir and the import of any native
+                // types from available plugins.
+                // This is only done if the type is not otherwise found, side effects of plugin loading may be avoided
+                // ### This should be an acceptable variation because A) It's only side effects (and img providers) B) You shouldn't be doing that in "." anyways!
+                if (QDeclarativeQmldirData *qmldir = qmldirForUrl(finalUrl().resolved(QUrl(QLatin1String("./qmldir"))))) {
+                    m_imports.addImport(importDatabase, QLatin1String("."),
+                                        QString(), -1, -1, QDeclarativeScriptParser::Import::Implicit,
+                                        qmldir->dirComponents(), 0);
+                } else {
+                    m_imports.addImport(importDatabase, QLatin1String("."),
+                                        QString(), -1, -1, QDeclarativeScriptParser::Import::Implicit,
+                                        QDeclarativeDirComponents(), 0);
+                }
+                if (m_imports.resolveType(typeName, &ref.type, &url, &majorVersion, &minorVersion,
+                                           &typeNamespace, &errorString) || typeNamespace) {
+                    typeFound = true;
+                }
             }
-            
-            setError(error);
-            return;
+
+            if (!typeFound) {
+                QDeclarativeError error;
+                error.setUrl(m_imports.baseUrl());
+                QString userTypeName = parserRef->name;
+                userTypeName.replace(QLatin1Char('/'),QLatin1Char('.'));
+                if (typeNamespace)
+                    error.setDescription(QDeclarativeTypeLoader::tr("Namespace %1 cannot be used as a type").arg(userTypeName));
+                else
+                    error.setDescription(QDeclarativeTypeLoader::tr("%1 %2").arg(userTypeName).arg(errorString));
+
+                if (!parserRef->refObjects.isEmpty()) {
+                    QDeclarativeParser::Object *obj = parserRef->refObjects.first();
+                    error.setLine(obj->location.start.line);
+                    error.setColumn(obj->location.start.column);
+                }
+
+                setError(error);
+                return;
+            }
         }
 
         if (ref.type) {

@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -2803,6 +2803,10 @@ void QWidget::destroy(bool destroyWindow, bool destroySubWindows)
                 if (window)
                     qt_mac_destructWindow(window);
             }
+#ifdef QT_MAC_USE_COCOA
+            if (isWindow())
+                QCoreGraphicsPaintEngine::clearColorSpace(this);
+#endif
         }
         QT_TRY {
             d->setWinId(0);
@@ -3556,10 +3560,12 @@ void QWidgetPrivate::show_sys()
         QPoint qlocal, qglobal;
         QWidget *widgetUnderMouse = 0;
         qt_mac_getTargetForMouseEvent(0, QEvent::Enter, qlocal, qglobal, 0, &widgetUnderMouse);
-        QApplicationPrivate::dispatchEnterLeave(widgetUnderMouse, qt_last_mouse_receiver);
-        qt_last_mouse_receiver = widgetUnderMouse;
-        qt_last_native_mouse_receiver = widgetUnderMouse ?
-            (widgetUnderMouse->internalWinId() ? widgetUnderMouse : widgetUnderMouse->nativeParentWidget()) : 0;
+        if (q == widgetUnderMouse) {
+            QApplicationPrivate::dispatchEnterLeave(widgetUnderMouse, qt_last_mouse_receiver);
+            qt_last_mouse_receiver = widgetUnderMouse;
+            qt_last_native_mouse_receiver = widgetUnderMouse ?
+                (widgetUnderMouse->internalWinId() ? widgetUnderMouse : widgetUnderMouse->nativeParentWidget()) : 0;
+        }
     }
 #endif
 
@@ -3612,6 +3618,10 @@ void QWidgetPrivate::hide_sys()
 #ifndef QT_MAC_USE_COCOA
             ShowHide(window, false);
 #else
+            // Only needed if it exists from 10.7 or later
+            if ((q->windowType() == Qt::Tool) && [window respondsToSelector: @selector(setAnimationBehavior:)])
+                [window setAnimationBehavior: 2]; // NSWindowAnimationBehaviorNone == 2
+
             [window orderOut:window];
             // Unfortunately it is not as easy as just hiding the window, we need
             // to find out if we were in full screen mode. If we were and this is
@@ -3712,10 +3722,12 @@ void QWidgetPrivate::hide_sys()
         QPoint qlocal, qglobal;
         QWidget *widgetUnderMouse = 0;
         qt_mac_getTargetForMouseEvent(0, QEvent::Leave, qlocal, qglobal, 0, &widgetUnderMouse);
-        QApplicationPrivate::dispatchEnterLeave(widgetUnderMouse, qt_last_native_mouse_receiver);
-        qt_last_mouse_receiver = widgetUnderMouse;
-        qt_last_native_mouse_receiver = widgetUnderMouse ?
-            (widgetUnderMouse->internalWinId() ? widgetUnderMouse : widgetUnderMouse->nativeParentWidget()) : 0;
+        if (q == widgetUnderMouse) {
+            QApplicationPrivate::dispatchEnterLeave(widgetUnderMouse, qt_last_native_mouse_receiver);
+            qt_last_mouse_receiver = widgetUnderMouse;
+            qt_last_native_mouse_receiver = widgetUnderMouse ?
+                (widgetUnderMouse->internalWinId() ? widgetUnderMouse : widgetUnderMouse->nativeParentWidget()) : 0;
+       }
      }
 #endif
 
@@ -3858,7 +3870,14 @@ void QWidget::setWindowState(Qt::WindowStates newstate)
                     d->updateFrameStrut();  // In theory the dirty would work, but it's optimized out if the window is not visible :(
                 }
                 // Everything should be handled by Cocoa.
-                [window zoom:window];
+                if (!windowFlags() & Qt::FramelessWindowHint) {
+                    [window zoom:window];
+                } else {
+                    QDesktopWidget *dsk = QApplication::desktop();
+                    QRect avail = dsk->availableGeometry(dsk->screenNumber(this));
+                    setGeometry(avail);
+                }
+
 #endif
                 needSendStateChange = oldstate == windowState(); // Zoom didn't change flags.
             } else if(oldstate & Qt::WindowMaximized && !(oldstate & Qt::WindowFullScreen)) {
@@ -3897,7 +3916,7 @@ void QWidgetPrivate::setFocus_sys()
     if (q->testAttribute(Qt::WA_WState_Created)) {
 #ifdef QT_MAC_USE_COCOA
         QMacCocoaAutoReleasePool pool;
-        NSView *view = qt_mac_nativeview_for(q);
+        NSView *view = qt_mac_effectiveview_for(q);
         [[view window] makeFirstResponder:view];
 #else
         SetKeyboardFocus(qt_mac_window_for(q), qt_mac_nativeview_for(q), 1);
@@ -4708,14 +4727,12 @@ void QWidgetPrivate::scroll_sys(int dx, int dy, const QRect &qscrollRect)
 
     // Scroll the whole widget if qscrollRect is not valid:
     QRect validScrollRect = qscrollRect.isValid() ? qscrollRect : q->rect();
-    validScrollRect &= clipRect();
 
     // If q is overlapped by other widgets, we cannot just blit pixels since
     // this will move overlapping widgets as well. In case we just update:
     const bool overlapped = isOverlapped(validScrollRect.translated(data.crect.topLeft()));
     const bool accelerateScroll = accelEnv && isOpaque && !overlapped;
     const bool isAlien = (q->internalWinId() == 0);
-    const QPoint scrollDelta(dx, dy);
 
     // If qscrollRect is valid, we are _not_ supposed to scroll q's children (as documented).
     // But we do scroll children (and the whole of q) if qscrollRect is invalid. This case is
@@ -4737,7 +4754,6 @@ void QWidgetPrivate::scroll_sys(int dx, int dy, const QRect &qscrollRect)
         }else {
             update_sys(qscrollRect);
         }
-        return;
     }
 
 #ifdef QT_MAC_USE_COCOA
@@ -4754,6 +4770,7 @@ void QWidgetPrivate::scroll_sys(int dx, int dy, const QRect &qscrollRect)
     // moved when the parent is scrolled. All directly or indirectly moved
     // children will receive a move event before the function call returns.
     QWidgetList movedChildren;
+    const QPoint scrollDelta(dx, dy);
     if (scrollChildren) {
         QObjectList children = q->children();
 

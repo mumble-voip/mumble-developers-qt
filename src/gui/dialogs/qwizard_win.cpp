@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -164,6 +164,7 @@ static PtrDrawThemeBackground pDrawThemeBackground = 0;
 static PtrGetThemePartSize pGetThemePartSize = 0;
 static PtrGetThemeColor pGetThemeColor = 0;
 
+int QVistaHelper::instanceCount = 0;
 bool QVistaHelper::is_vista = false;
 QVistaHelper::VistaState QVistaHelper::cachedVistaState = QVistaHelper::Dirty;
 
@@ -230,7 +231,11 @@ void QVistaBackButton::paintEvent(QPaintEvent *)
     else if (underMouse())
         state = WIZ_NAV_BB_HOT;
 
-   pDrawThemeBackground(theme, p.paintEngine()->getDC(), WIZ_NAV_BACKBUTTON, state, &clipRect, &clipRect); 
+    WIZ_NAVIGATIONPARTS buttonType = (layoutDirection() == Qt::LeftToRight
+                                      ? WIZ_NAV_BACKBUTTON
+                                      : WIZ_NAV_FORWARDBUTTON);
+
+   pDrawThemeBackground(theme, p.paintEngine()->getDC(), buttonType, state, &clipRect, &clipRect);
 }
 
 /******************************************************************************
@@ -243,7 +248,9 @@ QVistaHelper::QVistaHelper(QWizard *wizard)
     , wizard(wizard)
     , backButton_(0)
 {
-    is_vista = resolveSymbols();
+    is_vista = QSysInfo::WindowsVersion >= QSysInfo::WV_VISTA && resolveSymbols();
+    if (instanceCount++ == 0)
+        cachedVistaState = Dirty;
     if (is_vista)
         backButton_ = new QVistaBackButton(wizard);
 
@@ -255,6 +262,7 @@ QVistaHelper::QVistaHelper(QWizard *wizard)
 
 QVistaHelper::~QVistaHelper()
 {
+    --instanceCount;
 }
 
 bool QVistaHelper::isCompositionEnabled()
@@ -277,10 +285,16 @@ bool QVistaHelper::isThemeActive()
 
 QVistaHelper::VistaState QVistaHelper::vistaState()
 {
-    if (cachedVistaState == Dirty)
+    if (instanceCount == 0 || cachedVistaState == Dirty)
         cachedVistaState =
             isCompositionEnabled() ? VistaAero : isThemeActive() ? VistaBasic : Classic;
     return cachedVistaState;
+}
+
+void QVistaHelper::disconnectBackButton()
+{
+    if (backButton_) // Leave QStyleSheetStyle's connections on destroyed() intact.
+        backButton_->disconnect(SIGNAL(clicked()));
 }
 
 QColor QVistaHelper::basicWindowFrameColor()
@@ -338,13 +352,21 @@ void QVistaHelper::drawTitleBar(QPainter *painter)
         glowOffset = glowSize();
     }
 
+    const int titleLeft = (wizard->layoutDirection() == Qt::LeftToRight
+                           ? titleOffset() - glowOffset
+                           : wizard->width() - titleOffset() - textWidth + glowOffset);
+
     drawTitleText(
         painter, text,
-        QRect(titleOffset() - glowOffset, verticalCenter - textHeight / 2, textWidth, textHeight),
+        QRect(titleLeft, verticalCenter - textHeight / 2, textWidth, textHeight),
         hdc);
 
     if (!wizard->windowIcon().isNull()) {
-        QRect rect(leftMargin(), verticalCenter - iconSize() / 2, iconSize(), iconSize());
+        const int iconLeft = (wizard->layoutDirection() == Qt::LeftToRight
+                              ? leftMargin()
+                              : wizard->width() - leftMargin() - iconSize());
+
+        QRect rect(iconLeft, verticalCenter - iconSize() / 2, iconSize(), iconSize());
         HICON hIcon = wizard->windowIcon().pixmap(iconSize()).toWinHICON();
         DrawIconEx(hdc, rect.left(), rect.top(), hIcon, 0, 0, 0, NULL, DI_NORMAL | DI_COMPAT);
         DestroyIcon(hIcon);
@@ -386,12 +408,15 @@ bool QVistaHelper::winEvent(MSG* msg, long* result)
         }
         break;
     }
-    case WM_NCCALCSIZE: {
-        NCCALCSIZE_PARAMS* lpncsp = (NCCALCSIZE_PARAMS*)msg->lParam;
-        *result = DefWindowProc(msg->hwnd, msg->message, msg->wParam, msg->lParam);
-        lpncsp->rgrc[0].top -= (vistaState() == VistaAero ? titleBarSize() : 0);
+    case WM_NCCALCSIZE:
+        if (QSysInfo::WindowsVersion < QSysInfo::WV_WINDOWS8 && vistaState() == VistaAero) {
+            NCCALCSIZE_PARAMS* lpncsp = (NCCALCSIZE_PARAMS*)msg->lParam;
+            *result = DefWindowProc(msg->hwnd, msg->message, msg->wParam, msg->lParam);
+            lpncsp->rgrc[0].top -= titleBarSize();
+        } else {
+            return false; // Negative margins no longer work on Windows 8.
+        }
         break;
-    }
     default:
         LRESULT lResult;
         // Pass to DWM to handle
@@ -761,6 +786,19 @@ int QVistaHelper::titleOffset()
 {
     int iconOffset = wizard ->windowIcon().isNull() ? 0 : iconSize() + textSpacing;
     return leftMargin() + iconOffset;
+}
+
+int QVistaHelper::topOffset()
+{
+    if (vistaState() != VistaAero)
+        return titleBarSize() + 3;
+    static const int aeroOffset =
+        QSysInfo::WindowsVersion == QSysInfo::WV_WINDOWS7 ?
+        QStyleHelper::dpiScaled(4) : QStyleHelper::dpiScaled(13);
+    int result = aeroOffset;
+    if (QSysInfo::WindowsVersion < QSysInfo::WV_WINDOWS8)
+        result += titleBarSize();
+    return result;
 }
 
 QT_END_NAMESPACE

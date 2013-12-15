@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtXml module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -424,6 +424,12 @@ private:
     int     stringValueLen;
     QString emptyStr;
 
+    // The limit to the amount of times the DTD parsing functions can be called
+    // for the DTD currently being parsed.
+    static const int dtdRecursionLimit = 2;
+    // The maximum amount of characters an entity value may contain, after expansion.
+    static const int entityCharacterLimit = 1024;
+
     const QString &string();
     void stringClear();
     void stringAddC(QChar);
@@ -492,6 +498,7 @@ private:
     void unexpectedEof(ParseFunction where, int state);
     void parseFailed(ParseFunction where, int state);
     void pushParseState(ParseFunction function, int state);
+    bool isExpandedEntityValueTooLarge(QString *errorMessage);
 
     Q_DECLARE_PUBLIC(QXmlSimpleReader)
     QXmlSimpleReader *q_ptr;
@@ -5018,6 +5025,11 @@ bool QXmlSimpleReaderPrivate::parseDoctype()
                 }
                 break;
             case Mup:
+                if (dtdRecursionLimit > 0 && parameterEntities.size() > dtdRecursionLimit) {
+                    reportParseError(QString::fromLatin1(
+                        "DTD parsing exceeded recursion limit of %1.").arg(dtdRecursionLimit));
+                    return false;
+                }
                 if (!parseMarkupdecl()) {
                     parseFailed(&QXmlSimpleReaderPrivate::parseDoctype, state);
                     return false;
@@ -6627,6 +6639,50 @@ bool QXmlSimpleReaderPrivate::parseChoiceSeq()
     return false;
 }
 
+bool QXmlSimpleReaderPrivate::isExpandedEntityValueTooLarge(QString *errorMessage)
+{
+    QMap<QString, int> literalEntitySizes;
+    // The entity at (QMap<QString,) referenced the entities at (QMap<QString,) (int>) times.
+    QMap<QString, QMap<QString, int> > referencesToOtherEntities;
+    QMap<QString, int> expandedSizes;
+
+    // For every entity, check how many times all entity names were referenced in its value.
+    foreach (QString toSearch, entities.keys()) {
+        // The amount of characters that weren't entity names, but literals, like 'X'.
+        QString leftOvers = entities.value(toSearch);
+        // How many times was entityName referenced by toSearch?
+        foreach (QString entityName, entities.keys()) {
+            for (int i = 0; i < leftOvers.size() && i != -1; ) {
+                i = leftOvers.indexOf(QString::fromLatin1("&%1;").arg(entityName), i);
+                if (i != -1) {
+                    leftOvers.remove(i, entityName.size() + 2);
+                    // The entityName we're currently trying to find was matched in this string; increase our count.
+                    ++referencesToOtherEntities[toSearch][entityName];
+                }
+            }
+        }
+        literalEntitySizes[toSearch] = leftOvers.size();
+    }
+
+    foreach (QString entity, referencesToOtherEntities.keys()) {
+        expandedSizes[entity] = literalEntitySizes[entity];
+        foreach (QString referenceTo, referencesToOtherEntities.value(entity).keys()) {
+            const int references = referencesToOtherEntities.value(entity).value(referenceTo);
+            // The total size of an entity's value is the expanded size of all of its referenced entities, plus its literal size.
+            expandedSizes[entity] += expandedSizes[referenceTo] * references + literalEntitySizes[referenceTo] * references;
+        }
+
+        if (expandedSizes[entity] > entityCharacterLimit) {
+            if (errorMessage) {
+                *errorMessage = QString::fromLatin1("The XML entity \"%1\" expands too a string that is too large to process (%2 characters > %3).");
+                *errorMessage = (*errorMessage).arg(entity).arg(expandedSizes[entity]).arg(entityCharacterLimit);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 /*
   Parse a EntityDecl [70].
 
@@ -6721,6 +6777,12 @@ bool QXmlSimpleReaderPrivate::parseEntityDecl()
         switch (state) {
             case EValue:
                 if ( !entityExist(name())) {
+                    QString errorMessage;
+                    if (isExpandedEntityValueTooLarge(&errorMessage)) {
+                        reportParseError(errorMessage);
+                        return false;
+                    }
+
                     entities.insert(name(), string());
                     if (declHnd) {
                         if (!declHnd->internalEntityDecl(name(), string())) {

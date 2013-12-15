@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -80,6 +80,8 @@ private slots:
     void wheel();
     void flickVelocity();
     void disabled();
+    void nestedStopAtBounds();
+    void nestedStopAtBounds_data();
 
 private:
     QDeclarativeEngine engine;
@@ -280,7 +282,13 @@ void tst_qdeclarativeflickable::disabledContent()
         QApplication::sendEvent(canvas->viewport(), &mv);
     }
 
-    QVERIFY(flickable->contentX() < 0);
+    qreal contentX = flickable->contentX();
+#if defined(Q_OS_LINUX) && defined(QT_BUILD_INTERNAL)
+    if (contentX >= 0) {
+        QEXPECT_FAIL("", "QTBUG-26905", Abort);
+    }
+#endif
+    QVERIFY(contentX < 0);
     QVERIFY(flickable->contentY() < 0);
 
     QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, 0, canvas->mapFromScene(QPoint(90, 90)));
@@ -559,9 +567,93 @@ void tst_qdeclarativeflickable::disabled()
     QTest::mousePress(canvas->viewport(), Qt::LeftButton, 0, canvas->mapFromScene(QPoint(50, 10)));
     QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, 0, canvas->mapFromScene(QPoint(50, 10)));
 
-    QVERIFY(canvas->rootObject()->property("clicked").toBool() == true);
+    bool clickedToBool = canvas->rootObject()->property("clicked").toBool();
+#if defined(Q_OS_LINUX) && defined(QT_BUILD_INTERNAL)
+    if (clickedToBool != true) {
+        QEXPECT_FAIL("", "QTBUG-26905", Abort);
+    }
+#endif
+    QVERIFY(clickedToBool == true);
 }
 
+void tst_qdeclarativeflickable::nestedStopAtBounds_data()
+{
+    QTest::addColumn<bool>("transpose");
+    QTest::addColumn<bool>("invert");
+
+    QTest::newRow("left") << false << false;
+    QTest::newRow("right") << false << true;
+    QTest::newRow("top") << true << false;
+    QTest::newRow("bottom") << true << true;
+}
+
+void tst_qdeclarativeflickable::nestedStopAtBounds()
+{
+    QFETCH(bool, transpose);
+    QFETCH(bool, invert);
+
+    QDeclarativeView view;
+    view.setSource(QUrl::fromLocalFile(SRCDIR "/data/nestedStopAtBounds.qml"));
+    view.show();
+    QTest::qWaitForWindowShown(&view);
+    QVERIFY(view.rootObject());
+
+    QDeclarativeFlickable *outer =  qobject_cast<QDeclarativeFlickable*>(view.rootObject());
+    QVERIFY(outer);
+
+    QDeclarativeFlickable *inner = outer->findChild<QDeclarativeFlickable*>("innerFlickable");
+    QVERIFY(inner);
+    inner->setFlickableDirection(transpose ? QDeclarativeFlickable::VerticalFlick : QDeclarativeFlickable::HorizontalFlick);
+    inner->setContentX(invert ? 0 : 100);
+    inner->setContentY(invert ? 0 : 100);
+
+    const int threshold = QApplication::startDragDistance();
+
+    QPoint position(200, 200);
+    int &axis = transpose ? position.ry() : position.rx();
+
+    QGraphicsSceneMouseEvent moveEvent(QEvent::GraphicsSceneMouseMove);
+    moveEvent.setButton(Qt::LeftButton);
+    moveEvent.setButtons(Qt::LeftButton);
+
+    // drag toward the aligned boundary.  Outer mouse area dragged.
+    QTest::mousePress(view.viewport(), Qt::LeftButton, 0, position);
+    QTest::qWait(10);
+    axis += invert ? threshold * 2 : -threshold * 2;
+    moveEvent.setScenePos(position);
+    QApplication::sendEvent(view.scene(), &moveEvent);
+    axis += invert ? threshold : -threshold;
+    moveEvent.setScenePos(position);
+    QApplication::sendEvent(view.scene(), &moveEvent);
+    axis += invert ? threshold : -threshold;
+    moveEvent.setScenePos(position);
+    QApplication::sendEvent(view.scene(), &moveEvent);
+    QVERIFY(outer->contentX() != 50 || outer->contentY() != 50);
+    QVERIFY((inner->contentX() == 0 || inner->contentX() == 100)
+            && (inner->contentY() == 0 || inner->contentY() == 100));
+    QTest::mouseRelease(view.viewport(), Qt::LeftButton, 0, position);
+
+    axis = 200;
+    outer->setContentX(50);
+    outer->setContentY(50);
+
+    // drag away from the aligned boundary.  Inner mouse area dragged.
+    QTest::mousePress(view.viewport(), Qt::LeftButton, 0, position);
+    QTest::qWait(10);
+    axis += invert ? -threshold * 2 : threshold * 2;
+    moveEvent.setScenePos(position);
+    QApplication::sendEvent(view.scene(), &moveEvent);
+    axis += invert ? -threshold : threshold;
+    moveEvent.setScenePos(position);
+    QApplication::sendEvent(view.scene(), &moveEvent);
+    axis += invert ? -threshold : threshold;
+    moveEvent.setScenePos(position);
+    QApplication::sendEvent(view.scene(), &moveEvent);
+    QVERIFY(outer->contentX() == 50 && outer->contentY() == 50);
+    QVERIFY((inner->contentX() != 0 && inner->contentX() != 100)
+            || (inner->contentY() != 0 && inner->contentY() != 100));
+    QTest::mouseRelease(view.viewport(), Qt::LeftButton, 0, position);
+}
 
 template<typename T>
 T *tst_qdeclarativeflickable::findItem(QGraphicsObject *parent, const QString &objectName)

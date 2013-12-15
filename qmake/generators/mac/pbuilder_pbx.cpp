@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the qmake application of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -296,6 +296,7 @@ ProjectBuilderMakefileGenerator::writeSubDirs(QTextStream &t)
           << "\t\t\t" << writeSettings("children", grp_it.value(), SettingsAsList, 4) << ";" << "\n"
           << "\t\t\t" << writeSettings("name", escapeFilePath(grp_it.key().section(Option::dir_sep, -1))) << ";" << "\n"
           << "\t\t\t" << writeSettings("refType", "4", SettingsNoQuote) << ";" << "\n"
+          << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";" << "\n"
           << "\t\t" << "};" << "\n";
     }
 
@@ -645,7 +646,8 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
               << "\t\t\t" << writeSettings("isa", "PBXFileReference", SettingsNoQuote) << ";" << "\n"
               << "\t\t\t" << writeSettings("name", escapeFilePath(name)) << ";" << "\n"
               << "\t\t\t" << writeSettings("path", escapeFilePath(file)) << ";" << "\n"
-              << "\t\t\t" << writeSettings("refType", QString::number(reftypeForFile(file)), SettingsNoQuote) << ";" << "\n";
+              << "\t\t\t" << writeSettings("refType", QString::number(reftypeForFile(file)), SettingsNoQuote) << ";" << "\n"
+              << "\t\t\t" << writeSettings("sourceTree", sourceTreeForFile(file)) << ";" << "\n";
             if(pbVersion >= 38) {
                 QString filetype;
                 for(QStringList::Iterator cppit = Option::cpp_ext.begin(); cppit != Option::cpp_ext.end(); ++cppit) {
@@ -689,6 +691,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
           << "\t\t\t" << writeSettings("children", grp_it.value(), SettingsAsList, 4) << ";" << "\n"
           << "\t\t\t" << writeSettings("name", escapeFilePath(grp_it.key().section(Option::dir_sep, -1))) << ";" << "\n"
           << "\t\t\t" << writeSettings("refType", "4", SettingsNoQuote) << ";" << "\n"
+          << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";" << "\n"
           << "\t\t" << "};" << "\n";
     }
 
@@ -917,11 +920,14 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                     QString key = keyFor(library);
                     bool is_frmwrk = (library.endsWith(".framework"));
                     t << "\t\t" << key << " = {" << "\n"
-                      << "\t\t\t" << writeSettings("isa", (is_frmwrk ? "PBXFrameworkReference" : "PBXFileReference"), SettingsNoQuote) << ";" << "\n"
+                      << "\t\t\t" << writeSettings("isa", "PBXFileReference", SettingsNoQuote) << ";" << "\n"
                       << "\t\t\t" << writeSettings("name", escapeFilePath(name)) << ";" << "\n"
                       << "\t\t\t" << writeSettings("path", escapeFilePath(library)) << ";" << "\n"
                       << "\t\t\t" << writeSettings("refType", QString::number(reftypeForFile(library)), SettingsNoQuote) << ";" << "\n"
-                      << "\t\t" << "};" << "\n";
+                      << "\t\t\t" << writeSettings("sourceTree", sourceTreeForFile(library)) << ";" << "\n";
+                    if (is_frmwrk)
+                        t << "\t\t\t" << writeSettings("lastKnownFileType", "wrapper.framework") << ";" << "\n";
+                    t << "\t\t" << "};" << "\n";
                     project->values("QMAKE_PBX_LIBRARIES").append(key);
                     QString build_key = keyFor(library + ".BUILDABLE");
                     t << "\t\t" << build_key << " = {" << "\n"
@@ -989,6 +995,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
               << "\t\t\t" << writeSettings("name", escapeFilePath(grp)) << ";" << "\n"
               << "\t\t\t" << writeSettings("path", QStringList()) << ";" << "\n"
               << "\t\t\t" << writeSettings("refType", "4", SettingsNoQuote) << ";" << "\n"
+              << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";" << "\n"
               << "\t\t" << "};" << "\n";
         }
     }
@@ -1089,6 +1096,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
           << "\t\t\t" << writeSettings("name", "Source [bundle data]") << ";" << "\n"
           << "\t\t\t" << writeSettings("path", QStringList()) << ";" << "\n"
           << "\t\t\t" << writeSettings("refType", "4", SettingsNoQuote) << ";" << "\n"
+          << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";" << "\n"
           << "\t\t" << "};" << "\n";
     }
 
@@ -1136,6 +1144,7 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
       << "\t\t\t" << writeSettings("name", escapeFilePath(project->first("QMAKE_ORIG_TARGET"))) << ";" << "\n"
       << "\t\t\t" << writeSettings("path", QStringList()) << ";" << "\n"
       << "\t\t\t" << writeSettings("refType", "4", SettingsNoQuote) << ";" << "\n"
+      << "\t\t\t" << writeSettings("sourceTree", "<Group>") << ";" << "\n"
       << "\t\t" << "};" << "\n";
     //REFERENCE
     project->values("QMAKE_PBX_PRODUCTS").append(keyFor(pbx_dir + "QMAKE_PBX_REFERENCE"));
@@ -1249,15 +1258,6 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
       << "\t\t\t\t" << writeSettings("SECTORDER_FLAGS", QStringList()) << ";" << "\n"
       << "\t\t\t\t" << writeSettings("WARNING_CFLAGS", QStringList()) << ";" << "\n"
       << "\t\t\t\t" << writeSettings("PREBINDING", QStringList((project->isEmpty("QMAKE_DO_PREBINDING") ? "NO" : "YES")), SettingsNoQuote) << ";" << "\n";
-    if(!project->isEmpty("PRECOMPILED_HEADER")) {
-        if(pbVersion >= 38) {
-            t << "\t\t\t\t" << writeSettings("GCC_PRECOMPILE_PREFIX_HEADER", "YES") << ";" << "\n"
-              << "\t\t\t\t" << writeSettings("GCC_PREFIX_HEADER", escapeFilePath(project->first("PRECOMPILED_HEADER"))) << ";" << "\n";
-        } else {
-            t << "\t\t\t\t" << writeSettings("PRECOMPILE_PREFIX_HEADER", "YES") << ";" << "\n"
-              << "\t\t\t\t" << writeSettings("PREFIX_HEADER", escapeFilePath(project->first("PRECOMPILED_HEADER"))) << ";" << "\n";
-        }
-    }
     if((project->first("TEMPLATE") == "app" && project->isActiveConfig("app_bundle")) ||
        (project->first("TEMPLATE") == "lib" && !project->isActiveConfig("staticlib") &&
         project->isActiveConfig("lib_bundle"))) {
@@ -1330,10 +1330,6 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
         t << "\t\t\t\t" << writeSettings("MACOSX_DEPLOYMENT_TARGET", project->first("QMAKE_MACOSX_DEPLOYMENT_TARGET")) << ";" << "\n";
     if(!project->isEmpty("QMAKE_IPHONEOS_DEPLOYMENT_TARGET"))
         t << "\t\t\t\t" << writeSettings("IPHONEOS_DEPLOYMENT_TARGET", project->first("QMAKE_IPHONEOS_DEPLOYMENT_TARGET")) << ";" << "\n";
-    if(pbVersion >= 38) {
-        if(!project->isEmpty("OBJECTS_DIR"))
-            t << "\t\t\t\t" << writeSettings("OBJROOT", fixForOutput(project->first("OBJECTS_DIR"))) << ";" << "\n";
-    }
 #if 0
     if(!project->isEmpty("DESTDIR"))
         t << "\t\t\t\t" << writeSettings("SYMROOT", fixForOutput(project->first("DESTDIR"))) << ";" << "\n";
@@ -1527,6 +1523,10 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                 for (QMap<QString, QString>::Iterator set_it = settings.begin(); set_it != settings.end(); ++set_it)
                     t << "\t\t\t\t" << writeSettings(set_it.key(), set_it.value()) << ";\n";
                 if (pbVersion >= 46) {
+                    if (!project->isEmpty("PRECOMPILED_HEADER")) {
+                        t << "\t\t\t\t" << writeSettings("GCC_PRECOMPILE_PREFIX_HEADER", "YES") << ";" << "\n"
+                          << "\t\t\t\t" << writeSettings("GCC_PREFIX_HEADER", escapeFilePath(project->first("PRECOMPILED_HEADER"))) << ";" << "\n";
+                    }
                     if (buildConfigGroups.at(i) == QLatin1String("PROJECT")) {
                         t << "\t\t\t\t" << writeSettings("HEADER_SEARCH_PATHS", fixListForOutput("INCLUDEPATH") + QStringList(fixForOutput(specdir())), SettingsAsList, 5) << ";" << "\n"
                           << "\t\t\t\t" << writeSettings("LIBRARY_SEARCH_PATHS", fixListForOutput("QMAKE_PBX_LIBPATHS"), SettingsAsList, 5) << ";" << "\n"
@@ -1584,6 +1584,8 @@ ProjectBuilderMakefileGenerator::writeMakeParts(QTextStream &t)
                             if (!archs.isEmpty())
                                 t << "\t\t\t\t" << writeSettings("ARCHS", archs) << ";" << "\n";
                         }
+                        if (!project->isEmpty("OBJECTS_DIR"))
+                            t << "\t\t\t\t" << writeSettings("OBJROOT", escapeFilePath(project->first("OBJECTS_DIR"))) << ";" << "\n";
                     } else {
                         if (project->first("TEMPLATE") == "app") {
                             if (pbVersion < 38 && project->isActiveConfig("app_bundle"))
@@ -1882,6 +1884,14 @@ ProjectBuilderMakefileGenerator::reftypeForFile(const QString &where)
     int ret = 0; //absolute is the default..
     if(QDir::isRelativePath(unescapeFilePath(where)))
         ret = 4; //relative
+    return ret;
+}
+
+QString ProjectBuilderMakefileGenerator::sourceTreeForFile(const QString &where)
+{
+    QString ret = "<absolute>";
+    if (QDir::isRelativePath(unescapeFilePath(where)))
+        ret = "SOURCE_ROOT"; //relative
     return ret;
 }
 

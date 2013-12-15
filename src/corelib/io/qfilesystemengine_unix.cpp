@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -180,11 +180,17 @@ QFileSystemEntry QFileSystemEngine::canonicalName(const QFileSystemEntry &entry,
     return QFileSystemEntry(slowCanonicalized(absoluteName(entry).filePath()));
 #else
     char *ret = 0;
-# if defined(Q_OS_MAC)
-#  if !defined(QT_NO_CORESERVICES)
-    // Mac OS X 10.5.x doesn't support the realpath(X,0) extension we use here.
+# if defined(Q_OS_MAC) && !defined(Q_OS_IOS)
+    // When using -mmacosx-version-min=10.4, we get the legacy realpath implementation,
+    // which does not work properly with the realpath(X,0) form. See QTBUG-28282.
     if (QSysInfo::MacintoshVersion >= QSysInfo::MV_10_6) {
-        ret = realpath(entry.nativeFilePath().constData(), (char*)0);
+        ret = (char*)malloc(PATH_MAX + 1);
+        if (ret && realpath(entry.nativeFilePath().constData(), (char*)ret) == 0) {
+            const int savedErrno = errno; // errno is checked below, and free() might change it
+            free(ret);
+            errno = savedErrno;
+            ret = 0;
+        }
     } else {
         // on 10.5 we can use FSRef to resolve the file path.
         QString path = QDir::cleanPath(entry.filePath());
@@ -198,13 +204,19 @@ QFileSystemEntry QFileSystemEngine::canonicalName(const QFileSystemEntry &entry,
             return QFileSystemEntry(ret);
         }
     }
-#  else
-    ret = (char*)malloc(PATH_MAX);
-    realpath(entry.nativeFilePath().constData(), (char*)ret);
-#  endif //!defined(QT_NO_CORESERVICES)
-#  else
+# else
+#  if _POSIX_VERSION >= 200801L
     ret = realpath(entry.nativeFilePath().constData(), (char*)0);
-# endif //defined(Q_OS_MAC)
+#  else
+    ret = (char*)malloc(PATH_MAX + 1);
+    if (realpath(entry.nativeFilePath().constData(), (char*)ret) == 0) {
+        const int savedErrno = errno; // errno is checked below, and free() might change it
+        free(ret);
+        errno = savedErrno;
+        ret = 0;
+    }
+#  endif
+# endif
     if (ret) {
         data.knownFlagsMask |= QFileSystemMetaData::ExistsAttribute;
         data.entryFlags |= QFileSystemMetaData::ExistsAttribute;
@@ -265,7 +277,7 @@ QString QFileSystemEngine::resolveUserName(uint userId)
 
     struct passwd *pw = 0;
 #if !defined(Q_OS_INTEGRITY)
-#if !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && !defined(Q_OS_OPENBSD)
+#if !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && !defined(Q_OS_OPENBSD) && !defined(Q_OS_VXWORKS)
     struct passwd entry;
     getpwuid_r(userId, &entry, buf.data(), buf.size(), &pw);
 #else
@@ -289,7 +301,7 @@ QString QFileSystemEngine::resolveGroupName(uint groupId)
 
     struct group *gr = 0;
 #if !defined(Q_OS_INTEGRITY)
-#if !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && !defined(Q_OS_OPENBSD)
+#if !defined(QT_NO_THREAD) && defined(_POSIX_THREAD_SAFE_FUNCTIONS) && !defined(Q_OS_OPENBSD) && !defined(Q_OS_VXWORKS)
     size_max = sysconf(_SC_GETGR_R_SIZE_MAX);
     if (size_max == -1)
         size_max = 1024;
@@ -611,7 +623,7 @@ bool QFileSystemEngine::setPermissions(const QFileSystemEntry &entry, QFile::Per
 QString QFileSystemEngine::homePath()
 {
     QString home = QFile::decodeName(qgetenv("HOME"));
-    if (home.isNull())
+    if (home.isEmpty())
         home = rootPath();
     return QDir::cleanPath(home);
 }
@@ -627,9 +639,12 @@ QString QFileSystemEngine::tempPath()
     return QLatin1String(QT_UNIX_TEMP_PATH_OVERRIDE);
 #elif defined(Q_OS_BLACKBERRY)
     QString temp = QFile::decodeName(qgetenv("TEMP"));
+    if (temp.isEmpty())
+        temp = QFile::decodeName(qgetenv("TMPDIR"));
+
     if (temp.isEmpty()) {
-        qWarning("TEMP environment variable not set. Cannot determine temporary directory");
-        return QString();
+        qWarning("Neither the TEMP nor the TMPDIR environment variable is set, falling back to /tmp.");
+        temp = QLatin1String("/tmp/");
     }
     return QDir::cleanPath(temp);
 #else
@@ -660,8 +675,16 @@ QFileSystemEntry QFileSystemEngine::currentPath()
         }
 #else
         char currentName[PATH_MAX+1];
-        if (::getcwd(currentName, PATH_MAX))
+        if (::getcwd(currentName, PATH_MAX)) {
+#if defined(Q_OS_VXWORKS) && defined(VXWORKS_VXSIM)
+            QByteArray dir(currentName);
+            if (dir.indexOf(':') < dir.indexOf('/'))
+                dir.remove(0, dir.indexOf(':')+1);
+
+            qstrncpy(currentName, dir.constData(), PATH_MAX);
+#endif
             result = QFileSystemEntry(QByteArray(currentName), QFileSystemEntry::FromNativePath());
+        }
 # if defined(QT_DEBUG)
         if (result.isEmpty())
             qWarning("QFSFileEngine::currentPath: getcwd() failed");

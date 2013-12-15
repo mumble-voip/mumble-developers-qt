@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -119,8 +119,10 @@ void tst_QSql::cleanup()
 // of a field "id"(integer) and "name"(char/varchar).
 void tst_QSql::basicDriverTest()
 {
-    int argc = 0;
-    QApplication app( argc, 0, false );
+    int argc = 1;
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
+    QApplication app( argc, argv, false );
+
     tst_Databases dbs;
     dbs.open();
 
@@ -201,21 +203,22 @@ void tst_QSql::basicDriverTest()
 void tst_QSql::open()
 {
     int i;
-    int argc = 0;
+    int argc = 1;
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     int count = -1;
     for ( i = 0; i < 10; ++i ) {
 
-	QApplication app( argc, 0, false );
-	tst_Databases dbs;
+       QApplication app( argc, argv, false );
+       tst_Databases dbs;
 
-	dbs.open();
-	if ( count == -1 )
-	    // first iteration: see how many dbs are open
-	    count = (int) dbs.dbNames.count();
-	else
-	    // next iterations: make sure all are opened again
-	    QCOMPARE( count, (int)dbs.dbNames.count() );
-	dbs.close();
+       dbs.open();
+       if ( count == -1 )
+           // first iteration: see how many dbs are open
+           count = (int) dbs.dbNames.count();
+       else
+           // next iterations: make sure all are opened again
+           QCOMPARE( count, (int)dbs.dbNames.count() );
+       dbs.close();
     }
 }
 
@@ -230,8 +233,9 @@ void tst_QSql::openInvalid()
 
 void tst_QSql::concurrentAccess()
 {
-    int argc = 0;
-    QApplication app( argc, 0, false );
+    int argc = 1;
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
+    QApplication app( argc, argv, false );
     tst_Databases dbs;
 
     dbs.open();
@@ -258,8 +262,10 @@ void tst_QSql::concurrentAccess()
 
 void tst_QSql::openErrorRecovery()
 {
-    int argc = 0;
-    QApplication app( argc, 0, false );
+    int argc = 1;
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
+    QApplication app( argc, argv, false );
+
     tst_Databases dbs;
 
     dbs.addDbs();
@@ -305,8 +311,9 @@ void tst_QSql::openErrorRecovery()
 
 void tst_QSql::registerSqlDriver()
 {
-    int argc = 0;
-    QApplication app( argc, 0, false );
+    int argc = 1;
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
+    QApplication app( argc, argv, false );
 
     QSqlDatabase::registerSqlDriver( "QSQLTESTDRIVER", new QSqlDriverCreator<QSqlNullDriver> );
     QVERIFY( QSqlDatabase::drivers().contains( "QSQLTESTDRIVER" ) );

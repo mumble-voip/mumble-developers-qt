@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -49,6 +49,7 @@
 #include "qsettings.h"
 #include <QtCore/qmap.h>
 #include <QtCore/qpair.h>
+#include <QtCore/qpointer.h>
 #include <QtGui/qgraphicsitem.h>
 #include <QtGui/qgraphicsscene.h>
 #include <QtGui/qgraphicsview.h>
@@ -265,7 +266,7 @@ void showDebug(const char* funcName, const QAccessibleInterface *iface)
 #endif
 
 // This stuff is used for widgets/items with no window handle:
-typedef QMap<int, QPair<QObject*,int> > NotifyMap;
+typedef QMap<int, QPair<QPointer<QObject>, int> > NotifyMap;
 Q_GLOBAL_STATIC(NotifyMap, qAccessibleRecentSentEvents)
 static int eventNum = 0;
 
@@ -414,13 +415,26 @@ void QAccessible::updateAccessibility(QObject *o, int who, Event reason)
     if (reason != MenuCommand) { // MenuCommand is faked
         if (w != o) {
             // See comment "SENDING EVENTS TO OBJECTS WITH NO WINDOW HANDLE"
-            eventNum %= 50;              //[0..49]
-            int eventId = - eventNum - 1;
+            if (reason != QAccessible::ObjectDestroyed) {
+                /* In some rare occasions, the server (Qt) might get a ::get_accChild call with a
+                   childId that references an entry in the cache where there was a dangling
+                   QObject-pointer. Previously we crashed on this.
 
-            qAccessibleRecentSentEvents()->insert(eventId, qMakePair(o,who));
-            ptrNotifyWinEvent(reason, wid, OBJID_CLIENT, eventId );
+                   There is no point in actually notifying the AT client that the object got destroyed,
+                   because the AT client won't query for get_accChild if the event is ObjectDestroyed
+                   anyway, and we have no other way of mapping the eventId argument to the actual
+                   child/descendant object. (Firefox seems to simply completely ignore
+                   EVENT_OBJECT_DESTROY).
 
-            ++eventNum;
+                   We therefore guard each QObject in the cache with a QPointer, and only notify the AT
+                   client if the type is not ObjectDestroyed.
+                */
+                eventNum %= 50;              //[0..49]
+                int eventId = - eventNum - 1;
+                qAccessibleRecentSentEvents()->insert(eventId, qMakePair(QPointer<QObject>(o), who));
+                ptrNotifyWinEvent(reason, wid, OBJID_CLIENT, eventId );
+                ++eventNum;
+            }
         } else {
             ptrNotifyWinEvent(reason, wid, OBJID_CLIENT, who);
         }
@@ -603,8 +617,8 @@ HRESULT STDMETHODCALLTYPE QWindowsEnumerate::Skip(unsigned long celt)
 struct AccessibleElement {
     AccessibleElement(int entryId, QAccessibleInterface *accessible) {
         if (entryId < 0) {
-            QPair<QObject*, int> ref = qAccessibleRecentSentEvents()->value(entryId);
-            iface = QAccessible::queryAccessibleInterface(ref.first);
+            QPair<QPointer<QObject>, int> ref = qAccessibleRecentSentEvents()->value(entryId);
+            iface = QAccessible::queryAccessibleInterface(ref.first.data());
             entry = ref.second;
             cleanupInterface = true;
         } else {

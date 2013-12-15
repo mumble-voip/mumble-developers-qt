@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -260,6 +260,10 @@ static PtrWTGet ptrWTGet = 0;
 static PACKET localPacketBuf[QT_TABLET_NPACKETQSIZE];  // our own tablet packet queue.
 HCTX qt_tablet_context;  // the hardware context for the tablet (like a window handle)
 bool qt_tablet_tilt_support;
+QPointF oldHiResTabletGlobalPosF;
+
+// flags for extensions for special Languages, currently only for RTL languages
+bool qt_use_rtl_extensions = false;
 
 #ifndef QT_NO_TABLETEVENT
 static void tabletInit(const quint64 uniqueId, const UINT csr_type, HCTX hTab);
@@ -690,7 +694,6 @@ void QApplicationPrivate::initializeWidgetPaletteHash()
     menu.setColor(QPalette::Active, QPalette::Text, menuText);
     menu.setColor(QPalette::Active, QPalette::WindowText, menuText);
     menu.setColor(QPalette::Active, QPalette::ButtonText, menuText);
-    const QColor fg = menu.foreground().color(), btn = menu.button().color();
     QColor disabled(qt_colorref2qrgb(GetSysColor(COLOR_GRAYTEXT)));
     menu.setColor(QPalette::Disabled, QPalette::WindowText, disabled);
     menu.setColor(QPalette::Disabled, QPalette::Text, disabled);
@@ -845,7 +848,10 @@ void qt_init(QApplicationPrivate *priv, int)
 #ifndef QT_NO_TABLETEVENT
     initWinTabFunctions();
 #endif // QT_NO_TABLETEVENT
+
+#ifndef QT_NO_IM
     QApplicationPrivate::inputContext = new QWinInputContext(0);
+#endif
 
     // Read the initial cleartype settings...
     qt_win_read_cleartype_settings();
@@ -917,8 +923,10 @@ void qt_cleanup()
         displayDC = 0;
     }
 
+#ifndef QT_NO_IM
     delete QApplicationPrivate::inputContext;
     QApplicationPrivate::inputContext = 0;
+#endif
 
 #ifndef Q_WS_WINCE
   // Deinitialize OLE/COM
@@ -1476,8 +1484,11 @@ extern "C" LRESULT QT_WIN_CALLBACK QtWndProc(HWND hwnd, UINT message, WPARAM wPa
 
     long res = 0;
     if (!qApp)                                // unstable app state
+#ifndef QT_NO_IM
         RETURN(QWinInputContext::DefWindowProc(hwnd,message,wParam,lParam))
-
+#else
+        return res;
+#endif // QT_NO_IM
     QScopedLoopLevelCounter loopLevelCounter(QThreadData::get2(qApp->thread()));
 
 #if 0
@@ -2308,6 +2319,7 @@ extern "C" LRESULT QT_WIN_CALLBACK QtWndProc(HWND hwnd, UINT message, WPARAM wPa
 #endif
 #endif
 
+#ifndef QT_NO_IM
         case WM_IME_STARTCOMPOSITION:
         case WM_IME_ENDCOMPOSITION:
         case WM_IME_COMPOSITION: {
@@ -2343,6 +2355,7 @@ extern "C" LRESULT QT_WIN_CALLBACK QtWndProc(HWND hwnd, UINT message, WPARAM wPa
             }
             break;
         }
+#endif // QT_NO_IM
 #ifndef Q_WS_WINCE
         case WM_CHANGECBCHAIN:
         case WM_DRAWCLIPBOARD:
@@ -2677,7 +2690,11 @@ extern "C" LRESULT QT_WIN_CALLBACK QtWndProc(HWND hwnd, UINT message, WPARAM wPa
         RETURN(false);
 
 do_default:
+#ifndef QT_NO_IM
     RETURN(QWinInputContext::DefWindowProc(hwnd,message,wParam,lParam))
+#else
+    RETURN(TRUE);
+#endif
 }
 
 
@@ -3590,6 +3607,19 @@ bool QETWidget::translateTabletEvent(const MSG &msg, PACKET *localPacketBuf,
     int z = 0;
     qreal rotation = 0.0;
     qreal tangentialPressure;
+    // The tablet can be used in 2 different modes, depending on it settings:
+    // 1) Absolute (pen) mode:
+    //    The coordinates are scaled to the virtual desktop (by default). The user
+    //    can also choose to scale to the monitor or a region of the screen.
+    //    When entering proximity, the tablet driver snaps the mouse pointer to the
+    //    tablet position scaled to that area and keeps it in sync.
+    // 2) Relative (mouse) mode:
+    //    The pen follows the mouse. The constant 'absoluteRange' specifies the
+    //    manhattanLength difference for detecting if a tablet input device is in this mode,
+    //    in which case we snap the position to the mouse position.
+    // It seems there is no way to find out the mode programmatically, the LOGCONTEXT orgX/Y/Ext
+    // area is always the virtual desktop.
+    enum { absoluteRange = 20 };
 
     // the most common event that we get...
     t = QEvent::TabletMove;
@@ -3612,9 +3642,13 @@ bool QETWidget::translateTabletEvent(const MSG &msg, PACKET *localPacketBuf,
 #endif // QT_NO_TABLETEVENT
         prsNew = 0.0;
         QRect desktopArea = QApplication::desktop()->geometry();
-        QPointF hiResGlobal = currentTabletPointer.scaleCoord(ptNew.x, ptNew.y, desktopArea.left(),
-                                                              desktopArea.width(), desktopArea.top(),
-                                                              desktopArea.height());
+
+        // This code is to delay the tablet data one cycle to sync with the mouse location.
+        QPointF hiResTabletGlobalPosF = oldHiResTabletGlobalPosF;
+        oldHiResTabletGlobalPosF =
+            currentTabletPointer.scaleCoord(ptNew.x, ptNew.y, desktopArea.left(),
+                                            desktopArea.width(), desktopArea.top(),
+                                            desktopArea.height());
 
         if (btnNew) {
 #ifndef QT_NO_TABLETEVENT
@@ -3630,7 +3664,21 @@ bool QETWidget::translateTabletEvent(const MSG &msg, PACKET *localPacketBuf,
             t = QEvent::TabletRelease;
             button_pressed = false;
         }
-        QPoint globalPos(qRound(hiResGlobal.x()), qRound(hiResGlobal.y()));
+        QPoint globalPos = hiResTabletGlobalPosF.toPoint();
+
+        // Get Mouse Position and compare to tablet info
+        // Positions should be almost the same if we are in absolute
+        //  mode. If they are not, use the mouse location.
+#ifndef Q_WS_WINCE
+        POINT mouseLocationP;
+        if (GetCursorPos(&mouseLocationP)) {
+            const QPoint mouseLocation(mouseLocationP.x, mouseLocationP.y);
+            if ((mouseLocation - globalPos).manhattanLength() > absoluteRange) {
+                globalPos = mouseLocation;
+                hiResTabletGlobalPosF = globalPos;
+            }
+        }
+#endif // !Q_WS_WINCE
 
         if (t == QEvent::TabletPress)
         {
@@ -3697,7 +3745,7 @@ bool QETWidget::translateTabletEvent(const MSG &msg, PACKET *localPacketBuf,
             rotation = ort.orTwist;
         }
 #ifndef QT_NO_TABLETEVENT
-        QTabletEvent e(t, localPos, globalPos, hiResGlobal, currentTabletPointer.currentDevice,
+        QTabletEvent e(t, localPos, globalPos, hiResTabletGlobalPosF, currentTabletPointer.currentDevice,
                        currentTabletPointer.currentPointerType, prsNew, tiltX, tiltY,
                        tangentialPressure, rotation, z, QApplication::keyboardModifiers(), currentTabletPointer.llId);
         sendEvent = QApplication::sendSpontaneousEvent(w, &e);

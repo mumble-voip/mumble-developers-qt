@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -47,6 +47,8 @@
 #include <qstackedwidget.h>
 #include <qpushbutton.h>
 #include <QHBoxLayout>
+#include <qlineedit.h>
+#include "../../shared/util.h"
 
 //TESTED_CLASS=
 //TESTED_FILES=
@@ -61,7 +63,8 @@ public:
 
 private slots:
     void getSetCheck();
-	void testMinimumSize();
+    void testMinimumSize();
+    void dynamicPages();
 };
 
 tst_QStackedWidget::tst_QStackedWidget()
@@ -75,15 +78,15 @@ tst_QStackedWidget::~tst_QStackedWidget()
 // Testing that stackedwidget respect the minimum size of it's contents (task 95319)
 void tst_QStackedWidget::testMinimumSize()
 {
-	QWidget w;
+    QWidget w;
     QStackedWidget sw(&w);
     QPushButton button("Text", &sw);
-	sw.addWidget(&button);
+    sw.addWidget(&button);
     QHBoxLayout hboxLayout;
     hboxLayout.addWidget(&sw);
     w.setLayout(&hboxLayout);
     w.show();
-	QVERIFY(w.minimumSize() != QSize(0, 0));
+    QVERIFY(w.minimumSize() != QSize(0, 0));
 }
 
 // Testing get/set functions
@@ -114,10 +117,96 @@ void tst_QStackedWidget::getSetCheck()
     // has no problem handling out-of-bounds indices.
     // ("convenience function" => "just another way of achieving the
     // same goal")
-	obj1.setCurrentWidget((QWidget *)0);
+    obj1.setCurrentWidget((QWidget *)0);
     QCOMPARE(obj1.currentWidget(), var2);
 #endif
     delete var2;
+}
+
+// QTBUG-18242, a widget that deletes its children in hideEvent().
+// This caused a crash in QStackedLayout::setCurrentIndex() since
+// the focus widget was destroyed while hiding the previous page.
+class TestPage : public QWidget
+{
+public:
+    TestPage (bool staticWidgets = false) : QWidget(0), m_staticWidgets(staticWidgets)
+    {
+        new QVBoxLayout (this);
+    }
+
+    ~TestPage() {
+        destroyWidgets();
+    }
+
+    void setN(int n)
+    {
+        m_n = n;
+        if (m_staticWidgets)
+            createWidgets();
+    }
+
+    virtual void showEvent (QShowEvent *)
+    {
+        if (!m_staticWidgets)
+            createWidgets();
+    }
+
+    virtual void hideEvent (QHideEvent *)
+    {
+        if (!m_staticWidgets)
+            destroyWidgets();
+    }
+
+private:
+    void createWidgets() {
+        for (int i = 0; i < m_n; ++i) {
+            QLineEdit *le = new QLineEdit(this);
+            le->setObjectName(QString::fromLatin1("lineEdit%1").arg(i));
+            layout ()->addWidget(le);
+            m_les << le;
+        }
+    }
+
+    void destroyWidgets()
+    {
+        qDeleteAll(m_les);
+        m_les.clear ();
+    }
+
+    int m_n;
+    const bool m_staticWidgets;
+    QList<QLineEdit*> m_les;
+};
+
+void tst_QStackedWidget::dynamicPages()
+{
+    QStackedWidget *sw = new QStackedWidget;
+
+    TestPage *w1 = new TestPage(true);
+    w1->setN(3);
+
+    TestPage *w2 = new TestPage;
+    w2->setN(3);
+
+    sw->addWidget(w1);
+    sw->addWidget(w2);
+
+    QLineEdit *le11 = w1->findChild<QLineEdit*>(QLatin1String("lineEdit1"));
+    le11->setFocus();   // set focus to second widget in the page
+    sw->resize(200, 200);
+    sw->show();
+    qApp->setActiveWindow(sw);
+    QTest::qWaitForWindowShown(sw);
+    QTRY_COMPARE(QApplication::focusWidget(), le11);
+
+    sw->setCurrentIndex(1);
+    QLineEdit *le22 = w2->findChild<QLineEdit*>(QLatin1String("lineEdit2"));
+    le22->setFocus();
+    QTRY_COMPARE(QApplication::focusWidget(), le22);
+    // Going back should move focus back to le11
+    sw->setCurrentIndex(0);
+    QTRY_COMPARE(QApplication::focusWidget(), le11);
+
 }
 
 QTEST_MAIN(tst_QStackedWidget)

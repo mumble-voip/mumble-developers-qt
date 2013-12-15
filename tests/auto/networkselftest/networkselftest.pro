@@ -18,3 +18,5 @@ wince*: {
 } else {
     DEFINES += SRCDIR=\\\"$$PWD/\\\"
 }
+
+win32:CONFIG+=insignificant_test # QTBUG-27571

@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -72,6 +72,10 @@ private slots:
     void signalEmission();
     void qtBug13380();
     void forceActiveFocus();
+    void notifications();
+    void notifications_data();
+    void notificationsInScope();
+    void notificationsInScope_data();
 };
 
 /*
@@ -437,8 +441,16 @@ void tst_qdeclarativefocusscope::forceActiveFocus()
 {
     QDeclarativeView *view = new QDeclarativeView;
     view->setSource(QUrl::fromLocalFile(SRCDIR "/data/forceActiveFocus.qml"));
+    view->show();
+    qApp->setActiveWindow(view);
+    qApp->processEvents();
 
-    QGraphicsObject *rootObject = view->rootObject();
+#ifdef Q_WS_X11
+    // to be safe and avoid failing setFocus with window managers
+    qt_x11_wait_for_window_manager(view);
+#endif
+
+    QDeclarativeItem *rootObject = qobject_cast<QDeclarativeItem *>(view->rootObject());
     QVERIFY(rootObject);
 
     QDeclarativeItem *scope = findItem<QDeclarativeItem>(rootObject, QLatin1String("scope"));
@@ -457,6 +469,11 @@ void tst_qdeclarativefocusscope::forceActiveFocus()
     QVERIFY(scopeB);
     QVERIFY(itemB2);
 
+    QCOMPARE(rootObject->hasActiveFocus(), false);
+    QCOMPARE(scope->hasActiveFocus(), false);
+    QCOMPARE(scopeA->hasActiveFocus(), false);
+    QCOMPARE(scopeB->hasActiveFocus(), false);
+
     QSignalSpy rootSpy(rootObject, SIGNAL(activeFocusChanged(bool)));
     QSignalSpy scopeSpy(scope, SIGNAL(activeFocusChanged(bool)));
     QSignalSpy scopeASpy(scopeA, SIGNAL(activeFocusChanged(bool)));
@@ -465,22 +482,34 @@ void tst_qdeclarativefocusscope::forceActiveFocus()
     // First, walk the focus from item-a1 down to item-a2 and back again
     itemA1->forceActiveFocus();
     QVERIFY(itemA1->hasActiveFocus());
-    QCOMPARE(rootSpy.count(), 1);
+    QCOMPARE(rootSpy.count(), 0);
     QCOMPARE(scopeSpy.count(), 1);
 
     scopeA->forceActiveFocus();
     QVERIFY(!itemA1->hasActiveFocus());
     QVERIFY(scopeA->hasActiveFocus());
     QCOMPARE(scopeASpy.count(), 1);
-    QCOMPARE(rootSpy.count(), 1);
+    QCOMPARE(rootSpy.count(), 0);
     QCOMPARE(scopeSpy.count(), 1);
 
     itemA2->forceActiveFocus();
     QVERIFY(!itemA1->hasActiveFocus());
     QVERIFY(itemA2->hasActiveFocus());
     QVERIFY(scopeA->hasActiveFocus());
+    if (scopeASpy.count() == 3) {
+        qWarning() << "ignoring spurious changed signals";
+        QCOMPARE(scopeASpy.takeFirst().first().toBool(), true);
+        QCOMPARE(scopeASpy.takeFirst().first().toBool(), false);
+        QCOMPARE(scopeASpy.first().first().toBool(), true);
+    }
     QCOMPARE(scopeASpy.count(), 1);
-    QCOMPARE(rootSpy.count(), 1);
+    QCOMPARE(rootSpy.count(), 0);
+    if (scopeSpy.count() == 3) {
+        qWarning() << "ignoring spurious changed signals";
+        QCOMPARE(scopeSpy.takeFirst().first().toBool(), true);
+        QCOMPARE(scopeSpy.takeFirst().first().toBool(), false);
+        QCOMPARE(scopeSpy.first().first().toBool(), true);
+    }
     QCOMPARE(scopeSpy.count(), 1);
 
     scopeA->forceActiveFocus();
@@ -488,7 +517,7 @@ void tst_qdeclarativefocusscope::forceActiveFocus()
     QVERIFY(itemA2->hasActiveFocus());
     QVERIFY(scopeA->hasActiveFocus());
     QCOMPARE(scopeASpy.count(), 1);
-    QCOMPARE(rootSpy.count(), 1);
+    QCOMPARE(rootSpy.count(), 0);
     QCOMPARE(scopeSpy.count(), 1);
 
     itemA1->forceActiveFocus();
@@ -496,13 +525,13 @@ void tst_qdeclarativefocusscope::forceActiveFocus()
     QVERIFY(!scopeA->hasActiveFocus());
     QVERIFY(!itemA2->hasActiveFocus());
     QCOMPARE(scopeASpy.count(), 2);
-    QCOMPARE(rootSpy.count(), 1);
+    QCOMPARE(rootSpy.count(), 0);
     QCOMPARE(scopeSpy.count(), 1);
 
     // Then jump back and forth between branch 'a' and 'b'
     itemB1->forceActiveFocus();
     QVERIFY(itemB1->hasActiveFocus());
-    QCOMPARE(rootSpy.count(), 1);
+    QCOMPARE(rootSpy.count(), 0);
     QCOMPARE(scopeSpy.count(), 1);
 
     scopeA->forceActiveFocus();
@@ -510,7 +539,7 @@ void tst_qdeclarativefocusscope::forceActiveFocus()
     QVERIFY(!itemB1->hasActiveFocus());
     QVERIFY(scopeA->hasActiveFocus());
     QCOMPARE(scopeASpy.count(), 3);
-    QCOMPARE(rootSpy.count(), 1);
+    QCOMPARE(rootSpy.count(), 0);
     QCOMPARE(scopeSpy.count(), 1);
 
     scopeB->forceActiveFocus();
@@ -519,7 +548,7 @@ void tst_qdeclarativefocusscope::forceActiveFocus()
     QVERIFY(scopeB->hasActiveFocus());
     QCOMPARE(scopeASpy.count(), 4);
     QCOMPARE(scopeBSpy.count(), 1);
-    QCOMPARE(rootSpy.count(), 1);
+    QCOMPARE(rootSpy.count(), 0);
     QCOMPARE(scopeSpy.count(), 1);
 
     itemA2->forceActiveFocus();
@@ -527,7 +556,7 @@ void tst_qdeclarativefocusscope::forceActiveFocus()
     QVERIFY(itemA2->hasActiveFocus());
     QCOMPARE(scopeASpy.count(), 5);
     QCOMPARE(scopeBSpy.count(), 2);
-    QCOMPARE(rootSpy.count(), 1);
+    QCOMPARE(rootSpy.count(), 0);
     QCOMPARE(scopeSpy.count(), 1);
 
     itemB2->forceActiveFocus();
@@ -535,10 +564,267 @@ void tst_qdeclarativefocusscope::forceActiveFocus()
     QVERIFY(itemB2->hasActiveFocus());
     QCOMPARE(scopeASpy.count(), 6);
     QCOMPARE(scopeBSpy.count(), 3);
-    QCOMPARE(rootSpy.count(), 1);
+    QCOMPARE(rootSpy.count(), 0);
     QCOMPARE(scopeSpy.count(), 1);
 
     delete view;
+}
+
+
+void tst_qdeclarativefocusscope::notifications_data()
+{
+    QTest::addColumn<QString>("objectName");
+
+    QTest::newRow("rootItem") << "";
+    QTest::newRow("item1") << "item1";
+    QTest::newRow("item3") << "item3";
+    QTest::newRow("focusScope") << "scope1";
+}
+
+void tst_qdeclarativefocusscope::notifications()
+{
+    QFETCH(QString, objectName);
+    QDeclarativeView canvas;
+    canvas.setSource(QUrl::fromLocalFile(SRCDIR "/data/notifications.qml"));
+    canvas.show();
+    qApp->setActiveWindow(&canvas);
+    qApp->processEvents();
+
+#ifdef Q_WS_X11
+    // to be safe and avoid failing setFocus with window managers
+    qt_x11_wait_for_window_manager(&canvas);
+#endif
+
+    QGraphicsScene *scene = canvas.scene();
+
+    QDeclarativeItem *item = qobject_cast<QDeclarativeItem*>(canvas.rootObject());
+    QVERIFY(item);
+
+    item = objectName.isEmpty() ? item : item->findChild<QDeclarativeItem *>(objectName);
+    QVERIFY(item);
+
+    QSignalSpy focusSpy(item, SIGNAL(focusChanged(bool)));
+    QSignalSpy activeFocusSpy(item, SIGNAL(activeFocusChanged(bool)));
+
+    QCOMPARE(item->hasFocus(), false);
+    QCOMPARE(item->hasActiveFocus(), false);
+
+    item->setFocus(true);
+
+    QCOMPARE(item->hasFocus(), true);
+    QCOMPARE(item->hasActiveFocus(), true);
+    QCOMPARE(focusSpy.count(), 1);
+    QCOMPARE(activeFocusSpy.count(), 1);
+    QCOMPARE(focusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(activeFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), true);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), true);
+
+    item->setFocus(false);
+
+    QCOMPARE(item->hasFocus(), false);
+    QCOMPARE(item->hasActiveFocus(), false);
+    QCOMPARE(focusSpy.count(), 1);
+    QCOMPARE(activeFocusSpy.count(), 1);
+    QCOMPARE(focusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(activeFocusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), false);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), false);
+
+    item->QGraphicsItem::setFocus();
+
+    QCOMPARE(item->hasFocus(), true);
+    QCOMPARE(item->hasActiveFocus(), true);
+    QCOMPARE(focusSpy.count(), 1);
+    QCOMPARE(activeFocusSpy.count(), 1);
+    QCOMPARE(focusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(activeFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), true);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), true);
+
+    item->clearFocus();
+
+    QCOMPARE(item->hasFocus(), false);
+    QCOMPARE(item->hasActiveFocus(), false);
+    QCOMPARE(focusSpy.count(), 1);
+    QCOMPARE(activeFocusSpy.count(), 1);
+    QCOMPARE(focusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(activeFocusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), false);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), false);
+
+    scene->setFocusItem(item);
+
+    QCOMPARE(item->hasFocus(), true);
+    QCOMPARE(item->hasActiveFocus(), true);
+    QCOMPARE(focusSpy.count(), 1);
+    QCOMPARE(activeFocusSpy.count(), 1);
+    QCOMPARE(focusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(activeFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), true);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), true);
+
+    scene->setFocusItem(0);
+
+    QCOMPARE(item->hasFocus(), false);
+    QCOMPARE(item->hasActiveFocus(), false);
+    QCOMPARE(focusSpy.count(), 1);
+    QCOMPARE(activeFocusSpy.count(), 1);
+    QCOMPARE(focusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(activeFocusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), false);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), false);
+}
+
+void tst_qdeclarativefocusscope::notificationsInScope_data()
+{
+    QTest::addColumn<QString>("itemName");
+    QTest::addColumn<QString>("scopeName");
+
+    QTest::newRow("item4") << "item4" << "scope1";
+    QTest::newRow("item5") << "item5" << "scope2";
+}
+
+void tst_qdeclarativefocusscope::notificationsInScope()
+{
+    QFETCH(QString, itemName);
+    QFETCH(QString, scopeName);
+    QDeclarativeView canvas;
+    canvas.setSource(QUrl::fromLocalFile(SRCDIR "/data/notifications.qml"));
+    canvas.show();
+    qApp->setActiveWindow(&canvas);
+    qApp->processEvents();
+
+#ifdef Q_WS_X11
+    // to be safe and avoid failing setFocus with window managers
+    qt_x11_wait_for_window_manager(&canvas);
+#endif
+
+    QVERIFY(canvas.rootObject());
+
+    QDeclarativeItem *scope = canvas.rootObject()->findChild<QDeclarativeItem *>(scopeName);
+    QVERIFY(scope);
+
+    QDeclarativeItem *item = scope->findChild<QDeclarativeItem *>(itemName);
+    QVERIFY(item);
+
+    QSignalSpy itemFocusSpy(item, SIGNAL(focusChanged(bool)));
+    QSignalSpy itemActiveFocusSpy(item, SIGNAL(activeFocusChanged(bool)));
+
+    QSignalSpy scopeFocusSpy(scope, SIGNAL(focusChanged(bool)));
+    QSignalSpy scopeActiveFocusSpy(scope, SIGNAL(activeFocusChanged(bool)));
+
+    QCOMPARE(item->hasFocus(), false);
+    QCOMPARE(item->hasActiveFocus(), false);
+    QCOMPARE(scope->hasFocus(), false);
+    QCOMPARE(scope->hasActiveFocus(), false);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), false);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), false);
+    QCOMPARE(scope->property("handlerFocus").value<bool>(), false);
+    QCOMPARE(scope->property("handlerActiveFocus").value<bool>(), false);
+
+    item->setFocus(true);
+    QCOMPARE(item->hasFocus(), true);
+    QCOMPARE(item->hasActiveFocus(), false);
+    QCOMPARE(scope->hasFocus(), false);
+    QCOMPARE(scope->hasActiveFocus(), false);
+    QCOMPARE(itemFocusSpy.count(), 1);
+    QCOMPARE(itemFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(itemActiveFocusSpy.count(), 0);
+    QCOMPARE(scopeFocusSpy.count(), 0);
+    QCOMPARE(scopeActiveFocusSpy.count(), 0);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), true);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), false);
+    QCOMPARE(scope->property("handlerFocus").value<bool>(), false);
+    QCOMPARE(scope->property("handlerActiveFocus").value<bool>(), false);
+
+    item->setFocus(false);
+    QCOMPARE(item->hasFocus(), false);
+    QCOMPARE(item->hasActiveFocus(), false);
+    QCOMPARE(scope->hasFocus(), false);
+    QCOMPARE(scope->hasActiveFocus(), false);
+    QCOMPARE(itemFocusSpy.count(), 1);
+    QCOMPARE(itemFocusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(itemActiveFocusSpy.count(), 0);
+    QCOMPARE(scopeFocusSpy.count(), 0);
+    QCOMPARE(scopeActiveFocusSpy.count(), 0);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), false);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), false);
+    QCOMPARE(scope->property("handlerFocus").value<bool>(), false);
+    QCOMPARE(scope->property("handlerActiveFocus").value<bool>(), false);
+
+    item->forceActiveFocus();
+    QCOMPARE(item->hasFocus(), true);
+    QCOMPARE(item->hasActiveFocus(), true);
+    QCOMPARE(scope->hasFocus(), true);
+    QCOMPARE(scope->hasActiveFocus(), true);
+    QCOMPARE(itemFocusSpy.count(), 1);
+    QCOMPARE(itemFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(itemActiveFocusSpy.count(), 1);
+    QCOMPARE(itemActiveFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(scopeFocusSpy.count(), 1);
+    QCOMPARE(scopeFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(scopeActiveFocusSpy.count(), 1);
+    QCOMPARE(scopeActiveFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), true);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), true);
+    QCOMPARE(scope->property("handlerFocus").value<bool>(), true);
+    QCOMPARE(scope->property("handlerActiveFocus").value<bool>(), true);
+
+    scope->setFocus(false);
+    QCOMPARE(item->hasFocus(), true);
+    QCOMPARE(item->hasActiveFocus(), false);
+    QCOMPARE(scope->hasFocus(), false);
+    QCOMPARE(scope->hasActiveFocus(), false);
+    QCOMPARE(itemFocusSpy.count(), 0);
+    QCOMPARE(itemActiveFocusSpy.count(), 1);
+    QCOMPARE(itemActiveFocusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(scopeFocusSpy.count(), 1);
+    QCOMPARE(scopeFocusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(scopeActiveFocusSpy.count(), 1);
+    QCOMPARE(scopeActiveFocusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), true);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), false);
+    QCOMPARE(scope->property("handlerFocus").value<bool>(), false);
+    QCOMPARE(scope->property("handlerActiveFocus").value<bool>(), false);
+
+    scope->setFocus(true);
+    QCOMPARE(item->hasFocus(), true);
+    QCOMPARE(item->hasActiveFocus(), true);
+    QCOMPARE(scope->hasFocus(), true);
+    QCOMPARE(scope->hasActiveFocus(), true);
+    QCOMPARE(itemFocusSpy.count(), 0);
+    QCOMPARE(itemActiveFocusSpy.count(), 1);
+    QCOMPARE(itemActiveFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(scopeFocusSpy.count(), 1);
+    QCOMPARE(scopeFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(scopeActiveFocusSpy.count(), 1);
+    QCOMPARE(scopeActiveFocusSpy.takeFirst().first().toBool(), true);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), true);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), true);
+    QCOMPARE(scope->property("handlerFocus").value<bool>(), true);
+    QCOMPARE(scope->property("handlerActiveFocus").value<bool>(), true);
+
+    item->setFocus(false);
+    QCOMPARE(item->hasFocus(), false);
+    QCOMPARE(item->hasActiveFocus(), false);
+    QCOMPARE(scope->hasFocus(), true);
+    QCOMPARE(scope->hasActiveFocus(), true);
+    QCOMPARE(itemFocusSpy.count(), 1);
+    QCOMPARE(itemFocusSpy.takeFirst().first().toBool(), false);
+    QCOMPARE(itemActiveFocusSpy.count(), 1);
+    QCOMPARE(itemActiveFocusSpy.takeFirst().first().toBool(), false);
+    if (scopeFocusSpy.count() == 2) {
+        qWarning() << "ignoring spurious changed signals";
+        QCOMPARE(scopeFocusSpy.takeFirst().first().toBool(), false);
+        QCOMPARE(scopeFocusSpy.takeFirst().first().toBool(), true);
+    }
+    QCOMPARE(scopeFocusSpy.count(), 0);
+    QCOMPARE(scopeActiveFocusSpy.count(), 0);
+    QCOMPARE(item->property("handlerFocus").value<bool>(), false);
+    QCOMPARE(item->property("handlerActiveFocus").value<bool>(), false);
+    QCOMPARE(scope->property("handlerFocus").value<bool>(), true);
+    QCOMPARE(scope->property("handlerActiveFocus").value<bool>(), true);
 }
 
 QTEST_MAIN(tst_qdeclarativefocusscope)

@@ -1,45 +1,45 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
 
-
+#include <qconfig.h>
 #if defined(QT3_SUPPORT)
 #include <q3hbox.h>
 #include <q3textedit.h>
@@ -402,7 +402,9 @@ private slots:
 #endif
 #endif
 
+#ifndef QT_NO_IM
     void focusProxyAndInputMethods();
+#endif
     void scrollWithoutBackingStore();
 
     void taskQTBUG_7532_tabOrderWithFocusProxy();
@@ -440,6 +442,7 @@ bool tst_QWidget::ensureScreenSize(int width, int height)
     return (available.width() >= width && available.height() >= height);
 }
 
+#ifndef QT_NO_IM
 class MyInputContext : public QInputContext
 {
 public:
@@ -449,6 +452,7 @@ public:
     void reset() {}
     bool isComposing() const { return false; }
 };
+#endif // QT_NO_IM
 
 // Testing get/set functions
 void tst_QWidget::getSetCheck()
@@ -585,6 +589,7 @@ void tst_QWidget::getSetCheck()
     obj1.setAcceptDrops(true);
     QCOMPARE(true, obj1.acceptDrops());
 
+#ifndef QT_NO_IM
     // QInputContext * QWidget::inputContext()
     // void QWidget::setInputContext(QInputContext *)
     MyInputContext *var13 = new MyInputContext;
@@ -600,7 +605,13 @@ void tst_QWidget::getSetCheck()
     QCOMPARE(static_cast<QInputContext *>(var13), obj1.inputContext());
     obj1.setInputContext((QInputContext *)0);
     QCOMPARE(qApp->inputContext(), obj1.inputContext());
+#if defined(Q_OS_LINUX)
+    if (qApp->inputContext() == var13) {
+        QEXPECT_FAIL("", "QTBUG-26896", Abort);
+    }
+#endif
     QVERIFY(qApp->inputContext() != var13);
+#endif // QT_NO_IM
 
     // bool QWidget::autoFillBackground()
     // void QWidget::setAutoFillBackground(bool)
@@ -2041,6 +2052,15 @@ void tst_QWidget::showMaximized()
     }
 #endif
 #endif // QT3_SUPPORT
+#ifdef Q_WS_MAC // Only do this on Mac because it's still not getting accurate results elsewhere
+    {
+        QWidget w;
+        w.setWindowFlags(Qt::FramelessWindowHint);
+        w.showMaximized();
+        QTest::qWaitForWindowShown(&w);
+        QCOMPARE(w.geometry(), QApplication::desktop()->availableGeometry(&w));
+    }
+#endif
 }
 
 void tst_QWidget::showFullScreen()
@@ -3871,6 +3891,7 @@ void tst_QWidget::retainHIView()
     {
         const WidgetViewPair window  = createAndRetain();
         delete window.first;
+        QEXPECT_FAIL("", "QTBUG-26896", Abort);
         QVERIFY(testAndRelease(window.second));
     }
 
@@ -4718,6 +4739,9 @@ void tst_QWidget::update()
         w.update();
         QApplication::processEvents();
         QApplication::processEvents();
+#if defined(Q_OS_MAC)
+        QEXPECT_FAIL("", "QTBUG-26896", Abort);
+#endif
         QCOMPARE(child.numPaintEvents, 1);
         QCOMPARE(child.visibleRegion(), QRegion(child.rect()));
         QCOMPARE(child.paintedRegion, child.visibleRegion());
@@ -5493,7 +5517,6 @@ void tst_QWidget::moveChild()
     parent.setGeometry(60, 60, 150, 150);
 #endif
     child.setGeometry(25, 25, 50, 50);
-    QPoint childOffset = child.mapToGlobal(QPoint());
 
     parent.show();
     QTest::qWaitForWindowShown(&parent);
@@ -6753,6 +6776,9 @@ void tst_QWidget::renderInvisible()
 #ifdef RENDER_DEBUG
     testImage.save("explicitlyHiddenCalendarResized.png");
 #endif
+#if defined(Q_OS_LINUX) && defined(QT_BUILD_INTERNAL)
+    QEXPECT_FAIL("", "QTBUG-26896", Abort);
+#endif
     QCOMPARE(testImage, referenceImageResized);
     }
 
@@ -7448,6 +7474,9 @@ void tst_QWidget::render_worldTransform()
             QTransform expectedDeviceTransform = QTransform::fromTranslate(105, 5);
             expectedDeviceTransform.rotate(90);
             expectedDeviceTransform.translate(widgetOffset.x(), widgetOffset.y());
+#if defined(Q_OS_MAC)
+            QEXPECT_FAIL("", "QTBUG-26896", Abort);
+#endif
             QCOMPARE(painter.deviceTransform(), expectedDeviceTransform);
 
             // Set new world transform.
@@ -7484,9 +7513,6 @@ void tst_QWidget::render_worldTransform()
     painter.translate(105, 5);
     painter.rotate(90);
 
-    const QTransform worldTransform = painter.worldTransform();
-    const QTransform deviceTransform = painter.deviceTransform();
-
     // Render widgets onto image.
     widget.render(&painter);
 #ifdef RENDER_DEBUG
@@ -7522,6 +7548,9 @@ void tst_QWidget::render_worldTransform()
     expected.save("render_worldTransform_expected.png");
 #endif
 
+#if defined(Q_OS_MAC)
+    QEXPECT_FAIL("", "QTBUG-26896", Abort);
+#endif
     QCOMPARE(image, expected);
 }
 
@@ -7614,7 +7643,6 @@ void tst_QWidget::repaintWhenChildDeleted()
     w.r = QRegion();
 
     {
-        const QPoint tlwOffset = w.geometry().topLeft();
         ColorWidget child(&w, Qt::blue);
         child.setGeometry(10, 10, 10, 10);
         child.show();
@@ -8296,6 +8324,9 @@ void tst_QWidget::resizeInPaintEvent()
     // This will call resize in the paintEvent, which in turn will call
     // invalidateBuffer() and a new update request should be posted.
     widget.repaint();
+#if defined(Q_OS_LINUX) && defined(QT_BUILD_INTERNAL)
+    QEXPECT_FAIL("", "QTBUG-26896", Abort);
+#endif
     QCOMPARE(widget.numPaintEvents, 1);
     widget.numPaintEvents = 0;
 
@@ -9555,6 +9586,11 @@ void tst_QWidget::destroyBackingStore()
     // Check one more time, because the second time around does more caching.
     w.update();
     QApplication::processEvents();
+#if defined(Q_OS_MAC)
+    if (QSysInfo::MacintoshVersion == QSysInfo::MV_LION) {
+        QEXPECT_FAIL("", "QTBUG-26896", Abort);
+    }
+#endif
     QCOMPARE(w.numPaintEvents, 2);
 #else
     QSKIP("Test case relies on developer build (AUTOTEST_EXPORT)", SkipAll);
@@ -9938,6 +9974,7 @@ void tst_QWidget::rectOutsideCoordinatesLimit_task144779()
 
 void tst_QWidget::inputFocus_task257832()
 {
+#ifndef QT_NO_IM
       QLineEdit *widget = new QLineEdit;
       QInputContext *context = widget->inputContext();
       if (!context)
@@ -9949,6 +9986,9 @@ void tst_QWidget::inputFocus_task257832()
       widget->setReadOnly(true);
       QVERIFY(!context->focusWidget());
       delete widget;
+#else
+      QWARN("Cannot test without inputmethod support");
+#endif // QT_NO_IM
 }
 
 void tst_QWidget::setGraphicsEffect()
@@ -10379,6 +10419,7 @@ void tst_QWidget::opacityChangeCausesBackingStoreRecreation()
 #endif // !Q_SYMBIAN_SEMITRANSPARENT_BG_SURFACE
 #endif // Q_OS_SYMBIAN
 
+#ifndef QT_NO_IM
 class InputContextTester : public QInputContext
 {
     Q_OBJECT
@@ -10435,6 +10476,7 @@ void tst_QWidget::focusProxyAndInputMethods()
 
     delete toplevel;
 }
+#endif // QT_NO_IM
 
 #ifdef QT_BUILD_INTERNAL
 class scrollWidgetWBS : public QWidget

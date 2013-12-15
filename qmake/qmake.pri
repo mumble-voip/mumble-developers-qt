@@ -82,7 +82,6 @@ bootstrap { #Qt code
         qstringlist.cpp \
         qtemporaryfile.cpp \
         qtextstream.cpp \
-        qurl.cpp \
         quuid.cpp \
         qsettings.cpp \
         qlibraryinfo.cpp \
@@ -127,7 +126,6 @@ bootstrap { #Qt code
         qsystemerror_p.h \
         qtemporaryfile.h \
         qtextstream.h \
-        qurl.h \
         quuid.h \
         qvector.h \
         qxmlstream.h \
@@ -136,7 +134,6 @@ bootstrap { #Qt code
     unix {
         SOURCES += qfilesystemengine_unix.cpp qfilesystemiterator_unix.cpp qfsfileengine_unix.cpp
         mac {
-          SOURCES += qfilesystemengine_mac.cpp
           SOURCES += qcore_mac.cpp qsettings_mac.cpp
           QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.4 #enables weak linking for 10.4 (exported)
           LIBS += -framework ApplicationServices

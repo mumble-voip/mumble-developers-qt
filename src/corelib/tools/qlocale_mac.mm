@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -166,6 +166,11 @@ static QString macTimeToString(const QTime &time, bool short_format)
     return QCFString(CFDateFormatterCreateStringWithDate(0, myFormatter, myDate));
 }
 
+// Mac uses the Unicode CLDR format codes
+// http://www.unicode.org/reports/tr35/tr35-dates.html#Date_Field_Symbol_Table
+// See also qtbase/util/local_database/dateconverter.py
+// Makes the assumption that input formats are always well formed and consecutive letters
+// never exceed the maximum for the format code.
 static QString macToQtFormat(const QString &sys_fmt)
 {
     QString result;
@@ -185,55 +190,97 @@ static QString macToQtFormat(const QString &sys_fmt)
         int repeat = qt_repeatCount(sys_fmt, i);
 
         switch (c.unicode()) {
-            case 'G': // Qt doesn't support these :(
-            case 'Y':
-            case 'D':
-            case 'F':
-            case 'w':
-            case 'W':
-            case 'g':
+            // Qt does not support the following options
+            case 'G': // Era (1..5): 4 = long, 1..3 = short, 5 = narrow
+            case 'Y': // Year of Week (1..n): 1..n = padded number
+            case 'U': // Cyclic Year Name (1..5): 4 = long, 1..3 = short, 5 = narrow
+            case 'Q': // Quarter (1..4): 4 = long, 3 = short, 1..2 = padded number
+            case 'q': // Standalone Quarter (1..4): 4 = long, 3 = short, 1..2 = padded number
+            case 'w': // Week of Year (1..2): 1..2 = padded number
+            case 'W': // Week of Month (1): 1 = number
+            case 'D': // Day of Year (1..3): 1..3 = padded number
+            case 'F': // Day of Week in Month (1): 1 = number
+            case 'g': // Modified Julian Day (1..n): 1..n = padded number
+            case 'A': // Milliseconds in Day (1..n): 1..n = padded number
                 break;
 
-            case 'u': // extended year - use 'y'
-                if (repeat < 4)
+            case 'y': // Year (1..n): 2 = short year, 1 & 3..n = padded number
+            case 'u': // Extended Year (1..n): 2 = short year, 1 & 3..n = padded number
+                // Qt only supports long (4) or short (2) year, use long for all others
+                if (repeat == 2)
                     result += QLatin1String("yy");
                 else
                     result += QLatin1String("yyyy");
                 break;
-            case 'S': // fractional second
+            case 'M': // Month (1..5): 4 = long, 3 = short, 1..2 = number, 5 = narrow
+            case 'L': // Standalone Month (1..5): 4 = long, 3 = short, 1..2 = number, 5 = narrow
+                // Qt only supports long, short and number, use short for narrow
+                if (repeat == 5)
+                    result += QLatin1String("MMM");
+                else
+                    result += QString(repeat, QLatin1Char('M'));
+                break;
+            case 'd': // Day of Month (1..2): 1..2 padded number
+                result += QString(repeat, c);
+                break;
+            case 'E': // Day of Week (1..6): 4 = long, 1..3 = short, 5..6 = narrow
+                // Qt only supports long, short and padded number, use short for narrow
+                if (repeat == 4)
+                    result += QLatin1String("dddd");
+                else
+                    result += QLatin1String("ddd");
+                break;
+            case 'e': // Local Day of Week (1..6): 4 = long, 3 = short, 5..6 = narrow, 1..2 padded number
+            case 'c': // Standalone Local Day of Week (1..6): 4 = long, 3 = short, 5..6 = narrow, 1..2 padded number
+                // Qt only supports long, short and padded number, use short for narrow
+                if (repeat >= 5)
+                    result += QLatin1String("ddd");
+                else
+                    result += QString(repeat, QLatin1Char('d'));
+                break;
+            case 'a': // AM/PM (1): 1 = short
+                // Translate to Qt uppercase AM/PM
+                result += QLatin1String("AP");
+                break;
+            case 'h': // Hour [1..12] (1..2): 1..2 = padded number
+            case 'K': // Hour [0..11] (1..2): 1..2 = padded number
+            case 'j': // Local Hour [12 or 24] (1..2): 1..2 = padded number
+                // Qt h is local hour
+                result += QString(repeat, QLatin1Char('h'));
+                break;
+            case 'H': // Hour [0..23] (1..2): 1..2 = padded number
+            case 'k': // Hour [1..24] (1..2): 1..2 = padded number
+                // Qt H is 0..23 hour
+                result += QString(repeat, QLatin1Char('H'));
+                break;
+            case 'm': // Minutes (1..2): 1..2 = padded number
+            case 's': // Seconds (1..2): 1..2 = padded number
+                result += QString(repeat, c);
+                break;
+            case 'S': // Fractional second (1..n): 1..n = truncates to decimal places
+                // Qt uses msecs either unpadded or padded to 3 places
                 if (repeat < 3)
                     result += QLatin1Char('z');
                 else
                     result += QLatin1String("zzz");
                 break;
-            case 'E':
-                if (repeat <= 3)
-                    result += QLatin1String("ddd");
-                else
-                    result += QLatin1String("dddd");
-                break;
-            case 'e':
-                if (repeat >= 2)
-                    result += QLatin1String("dd");
-                else
-                    result += QLatin1Char('d');
-                break;
-            case 'a':
-                result += QLatin1String("AP");
-                break;
-            case 'k':
-                result += QString(repeat, QLatin1Char('H'));
-                break;
-            case 'K':
-                result += QString(repeat, QLatin1Char('h'));
-                break;
-            case 'z':
-            case 'Z':
-            case 'v':
+            case 'z': // Time Zone (1..4)
+            case 'Z': // Time Zone (1..5)
+            case 'O': // Time Zone (1, 4)
+            case 'v': // Time Zone (1, 4)
+            case 'V': // Time Zone (1..4)
+            case 'X': // Time Zone (1..5)
+            case 'x': // Time Zone (1..5)
                 result += QLatin1Char('t');
                 break;
             default:
-                result += QString(repeat, c);
+                // a..z and A..Z are reserved for format codes, so any occurrence of these not
+                // already processed are not known and so unsupported formats to be ignored.
+                // All other chars are allowed as literals.
+                if (c < QLatin1Char('A') || c > QLatin1Char('z') ||
+                    (c > QLatin1Char('Z') && c < QLatin1Char('a'))) {
+                    result += QString(repeat, c);
+                }
                 break;
         }
 
@@ -345,7 +392,7 @@ static QString macFormatCurrency(const QSystemLocale::CurrencyToStringArgument &
 
 static QVariant macQuoteString(QSystemLocale::QueryType type, const QStringRef &str)
 {
-#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+#if MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6 && !defined(Q_OS_IOS)
     if (QSysInfo::MacintoshVersion < QSysInfo::MV_10_6)
         return QVariant();
 
@@ -403,7 +450,9 @@ QVariant QSystemLocale::query(QueryType type, QVariant in = QVariant()) const
         return macDayName(in.toInt(), (type == DayNameShort));
     case MonthNameLong:
     case MonthNameShort:
-        return macMonthName(in.toInt(), (type == MonthNameShort));
+    case StandaloneMonthNameLong:
+    case StandaloneMonthNameShort:
+        return macMonthName(in.toInt(), (type == MonthNameShort || type == StandaloneMonthNameShort));
     case DateToStringShort:
     case DateToStringLong:
         return macDateToString(in.toDate(), (type == DateToStringShort));
@@ -434,18 +483,29 @@ QVariant QSystemLocale::query(QueryType type, QVariant in = QVariant()) const
     case CurrencyToString:
         return macFormatCurrency(in.value<QSystemLocale::CurrencyToStringArgument>());
     case UILanguages: {
-        QCFType<CFArrayRef> languages = (CFArrayRef)CFPreferencesCopyValue(
+        QCFType<CFPropertyListRef> languages = CFPreferencesCopyValue(
                  CFSTR("AppleLanguages"),
                  kCFPreferencesAnyApplication,
                  kCFPreferencesCurrentUser,
                  kCFPreferencesAnyHost);
-        const int cnt = CFArrayGetCount(languages);
         QStringList result;
-        result.reserve(cnt);
-        for (int i = 0; i < cnt; ++i) {
-            const QString lang = QCFString::toQString(
-                        static_cast<CFStringRef>(CFArrayGetValueAtIndex(languages, i)));
-            result.append(lang);
+        if (!languages)
+            return QVariant(result);
+
+        CFTypeID typeId = CFGetTypeID(languages);
+        if (typeId == CFArrayGetTypeID()) {
+            const int cnt = CFArrayGetCount(languages.as<CFArrayRef>());
+            result.reserve(cnt);
+            for (int i = 0; i < cnt; ++i) {
+                const QString lang = QCFString::toQString(
+                            static_cast<CFStringRef>(CFArrayGetValueAtIndex(languages.as<CFArrayRef>(), i)));
+                result.append(lang);
+            }
+        } else if (typeId == CFStringGetTypeID()) {
+            result = QStringList(QCFString::toQString(languages.as<CFStringRef>()));
+        } else {
+            qWarning("QLocale::uiLanguages(): CFPreferencesCopyValue returned unhandled type \"%s\"; please report to http://bugreports.qt-project.org",
+                     qPrintable(QCFString::toQString(CFCopyTypeIDDescription(typeId))));
         }
         return QVariant(result);
     }

@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -163,6 +163,7 @@ class tst_QXmlSimpleReader : public QObject
         void reportNamespace() const;
         void reportNamespace_data() const;
         void roundtripWithNamespaces() const;
+        void dtdRecursionLimit();
 
     private:
         static QDomDocument fromByteArray(const QString &title, const QByteArray &ba, bool *ok);
@@ -768,6 +769,63 @@ void tst_QXmlSimpleReader::roundtripWithNamespaces() const
         QCOMPARE(expected, one.toByteArray().constData());
         QCOMPARE(one.toByteArray(2).constData(), two.toByteArray(2).constData());
         QCOMPARE(two.toByteArray(2).constData(), two.toByteArray(2).constData());
+    }
+}
+
+class TestHandler : public QXmlDefaultHandler
+{
+public:
+    TestHandler() :
+        recursionCount(0)
+    {
+    }
+
+    bool internalEntityDecl(const QString &name, const QString &value)
+    {
+        ++recursionCount;
+        return QXmlDefaultHandler::internalEntityDecl(name, value);
+    }
+
+    int recursionCount;
+};
+
+void tst_QXmlSimpleReader::dtdRecursionLimit()
+{
+    QFile file("xmldocs/2-levels-nested-dtd.xml");
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QXmlSimpleReader xmlReader;
+    {
+        QXmlInputSource *source = new QXmlInputSource(&file);
+        TestHandler handler;
+        xmlReader.setDeclHandler(&handler);
+        xmlReader.setErrorHandler(&handler);
+        QVERIFY(!xmlReader.parse(source));
+    }
+
+    file.close();
+    file.setFileName("xmldocs/1-levels-nested-dtd.xml");
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    {
+        QXmlInputSource *source = new QXmlInputSource(&file);
+        TestHandler handler;
+        xmlReader.setDeclHandler(&handler);
+        xmlReader.setErrorHandler(&handler);
+        QVERIFY(!xmlReader.parse(source));
+        // The error wasn't because of the recursion limit being reached,
+        // it was because the document is not valid.
+        QVERIFY(handler.recursionCount < 2);
+    }
+
+    file.close();
+    file.setFileName("xmldocs/internal-entity-polynomial-attribute.xml");
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    {
+        QXmlInputSource *source = new QXmlInputSource(&file);
+        TestHandler handler;
+        xmlReader.setDeclHandler(&handler);
+        xmlReader.setErrorHandler(&handler);
+        QVERIFY(!xmlReader.parse(source));
+        QCOMPARE(handler.recursionCount, 2);
     }
 }
 

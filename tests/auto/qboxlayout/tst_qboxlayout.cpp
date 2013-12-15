@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -62,12 +62,17 @@ public slots:
 
 private slots:
     void insertSpacerItem();
+    void insertLayout();
     void sizeHint();
     void sizeConstraints();
     void setGeometry();
     void setStyleShouldChangeSpacing();
 
+    void testLayoutEngine_data();
+    void testLayoutEngine();
+
     void taskQTBUG_7103_minMaxWidthNotRespected();
+    void taskQTBUG_27420_takeAtShouldUnparentLayout();
 };
 
 class CustomLayoutStyle : public QWindowsStyle
@@ -158,6 +163,26 @@ void tst_QBoxLayout::insertSpacerItem()
 
     window->show();
 }
+
+void tst_QBoxLayout::insertLayout()
+{
+    QWidget *window = new QWidget;
+    QVBoxLayout *vbox = new QVBoxLayout(window);
+    QVBoxLayout *dummyParentLayout = new QVBoxLayout;
+    QHBoxLayout *subLayout = new QHBoxLayout;
+    dummyParentLayout->addLayout(subLayout);
+    QCOMPARE(subLayout->parent(), dummyParentLayout);
+    QCOMPARE(dummyParentLayout->count(), 1);
+
+    // add subLayout to another layout
+    QTest::ignoreMessage(QtWarningMsg, "QLayout::addChildLayout: layout \"\" already has a parent");
+    vbox->addLayout(subLayout);
+    QCOMPARE((subLayout->parent() == vbox), (vbox->count() == 1));
+
+    delete dummyParentLayout;
+    delete window;
+}
+
 
 void tst_QBoxLayout::sizeHint()
 {
@@ -273,6 +298,208 @@ void tst_QBoxLayout::taskQTBUG_7103_minMaxWidthNotRespected()
     QTest::qWait(50);
 
     QCOMPARE(label->height(), height);
+}
+
+void tst_QBoxLayout::taskQTBUG_27420_takeAtShouldUnparentLayout()
+{
+    QSharedPointer<QHBoxLayout> outer(new QHBoxLayout);
+    QPointer<QVBoxLayout> inner = new QVBoxLayout;
+
+    outer->addLayout(inner);
+    QCOMPARE(outer->count(), 1);
+    QCOMPARE(inner->parent(), outer.data());
+
+    QLayoutItem *item = outer->takeAt(0);
+    QCOMPARE(item->layout(), inner.data());
+    QVERIFY(!item->layout()->parent());
+
+    outer.clear();
+
+    if (inner)
+        delete item; // success: a taken item/layout should not be deleted when the old parent is deleted
+    else
+        QVERIFY(!inner.isNull());
+}
+
+
+struct Descr
+{
+    Descr(int min, int sh, int max = -1, bool exp= false, int _stretch = 0, bool _empty = false)
+        :minimumSize(min), sizeHint(sh), maximumSize(max < 0 ? QLAYOUTSIZE_MAX : max),
+         expanding(exp), stretch(_stretch), empty(_empty)
+        {}
+
+    int minimumSize;
+    int sizeHint;
+    int maximumSize;
+    bool expanding;
+
+    int stretch;
+
+    bool empty;
+};
+
+
+typedef QList<Descr> DescrList;
+Q_DECLARE_METATYPE(DescrList);
+
+typedef QList<int> SizeList;
+Q_DECLARE_METATYPE(SizeList);
+
+typedef QList<int> PosList;
+
+
+
+class LayoutItem : public QLayoutItem
+{
+public:
+    LayoutItem(const Descr &descr) :m_descr(descr) {}
+
+    QSize sizeHint() const { return QSize(m_descr.sizeHint, 100); }
+    QSize minimumSize() const { return QSize(m_descr.minimumSize, 0); }
+    QSize maximumSize() const { return QSize(m_descr.maximumSize, QLAYOUTSIZE_MAX); }
+    Qt::Orientations expandingDirections() const
+        { return m_descr.expanding ? Qt::Horizontal :  Qt::Orientations(0); }
+    void setGeometry(const QRect &r) { m_pos = r.x(); m_size = r.width();}
+    QRect geometry() const { return QRect(m_pos, 0, m_size, 100); }
+    bool isEmpty() const { return m_descr.empty; }
+
+private:
+    Descr m_descr;
+    int m_pos;
+    int m_size;
+};
+
+void tst_QBoxLayout::testLayoutEngine_data()
+{
+    // (int min, int sh, int max = -1, bool exp= false, int _stretch = 0, bool _empty = false)
+    QTest::addColumn<DescrList>("itemDescriptions");
+    QTest::addColumn<int>("size");
+    QTest::addColumn<int>("spacing");
+    QTest::addColumn<PosList>("expectedPositions");
+    QTest::addColumn<SizeList>("expectedSizes");
+
+    QTest::newRow("Just one")
+        << (DescrList() << Descr(0, 100))
+        << 200
+        << 0
+        << (PosList() << 0)
+        << (SizeList() << 200);
+
+    QTest::newRow("Two non-exp")
+        << (DescrList() << Descr(0, 100) << Descr(0,100))
+        << 400
+        << 0
+        << (PosList() << 0 << 200)
+        << (SizeList() << 200 << 200);
+
+    QTest::newRow("Exp + non-exp")
+        << (DescrList() << Descr(0, 100, -1, true) << Descr(0,100))
+        << 400
+        << 0
+        << (PosList() << 0 << 300)
+        << (SizeList() << 300 << 100);
+
+
+    QTest::newRow("Stretch")
+        << (DescrList() << Descr(0, 100, -1, false, 1) << Descr(0,100, -1, false, 2))
+        << 300
+        << 0
+        << (PosList() << 0 << 100)
+        << (SizeList() << 100 << 200);
+
+
+    QTest::newRow("Spacing")
+        << (DescrList() << Descr(0, 100) << Descr(0,100))
+        << 400
+        << 10
+        << (PosList() << 0 << 205)
+        << (SizeList() << 195 << 195);
+
+
+    QTest::newRow("Less than minimum")
+        << (DescrList() << Descr(100, 100, 100, false) << Descr(50, 100, 100, false))
+        << 100
+        << 0
+        << (PosList() << 0 << 50)
+        << (SizeList() << 50 << 50);
+
+
+    QTest::newRow("Less than sizehint")
+        << (DescrList() << Descr(100, 200, 100, false) << Descr(50, 200, 100, false))
+        << 200
+        << 0
+        << (PosList() << 0 << 100)
+        << (SizeList() << 100 << 100);
+
+    QTest::newRow("Too much space")
+        << (DescrList() << Descr(0, 100, 100, false) << Descr(0, 100, 100, false))
+        << 500
+        << 0
+        << (PosList() << 100 << 300)
+        << (SizeList() << 100 << 100);
+
+    QTest::newRow("Empty")
+        << (DescrList() << Descr(0, 100, 100) << Descr(0,0,-1, false, 0, true) << Descr(0, 100, 100) )
+        << 500
+        << 0
+        << (PosList() << 100 << 300 << 300)
+        << (SizeList() << 100 << 0 << 100);
+
+    QTest::newRow("QTBUG-33104")
+        << (DescrList() << Descr(11, 75, 75, true) << Descr(75, 75))
+        << 200
+        << 0
+        << (PosList() << 0 << 75)
+        << (SizeList() << 75 << 125);
+
+    QTest::newRow("Expanding with maximumSize")
+        << (DescrList() << Descr(11, 75, 100, true) << Descr(75, 75))
+        << 200
+        << 0
+        << (PosList() << 0 << 100)
+        << (SizeList() << 100 << 100);
+
+    QTest::newRow("Stretch with maximumSize")
+        << (DescrList() << Descr(11, 75, 100, false, 1) << Descr(75, 75))
+        << 200
+        << 0
+        << (PosList() << 0 << 100)
+        << (SizeList() << 100 << 100);
+
+    QTest::newRow("Stretch with maximumSize last")
+        << (DescrList()  << Descr(75, 75) << Descr(11, 75, 100, false, 1))
+        << 200
+        << 0
+        << (PosList() << 0 << 100)
+        << (SizeList() << 100 << 100);
+}
+
+void tst_QBoxLayout::testLayoutEngine()
+{
+    QFETCH(DescrList, itemDescriptions);
+    QFETCH(int, size);
+    QFETCH(int, spacing);
+    QFETCH(PosList, expectedPositions);
+    QFETCH(SizeList, expectedSizes);
+
+    QHBoxLayout box;
+    box.setSpacing(spacing);
+    int i;
+    for (i = 0; i < itemDescriptions.count(); ++i) {
+         Descr descr = itemDescriptions.at(i);
+         LayoutItem *li = new LayoutItem(descr);
+         box.addItem(li);
+         box.setStretch(i, descr.stretch);
+    }
+    box.setGeometry(QRect(0,0,size,100));
+    for (i = 0; i < expectedSizes.count(); ++i) {
+        int xSize = expectedSizes.at(i);
+        int xPos = expectedPositions.at(i);
+        QLayoutItem *item = box.itemAt(i);
+        QCOMPARE(item->geometry().width(), xSize);
+        QCOMPARE(item->geometry().x(), xPos);
+    }
 }
 
 QTEST_MAIN(tst_QBoxLayout)

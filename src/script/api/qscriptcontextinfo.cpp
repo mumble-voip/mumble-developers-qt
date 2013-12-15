@@ -1,8 +1,7 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtScript module of the Qt Toolkit.
 **
@@ -16,7 +15,8 @@
 ** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
 ** If you have questions regarding the use of this file, please contact
-** Nokia at qt-info@nokia.com.
+** us via http://www.qt-project.org/.
+**
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
@@ -160,7 +160,7 @@ QScriptContextInfoPrivate::QScriptContextInfoPrivate(const QScriptContext *conte
             if (returnPC && codeBlock && QScriptEnginePrivate::hasValidCodeBlockRegister(frame)) {
 #if ENABLE(JIT)
                 JSC::JITCode code = codeBlock->getJITCode();
-                unsigned jitOffset = code.offsetOf(JSC::ReturnAddressPtr(returnPC).value());
+                uintptr_t jitOffset = reinterpret_cast<uintptr_t>(JSC::ReturnAddressPtr(returnPC).value()) - reinterpret_cast<uintptr_t>(code.addressForCall().executableAddress());
                 // We can only use the JIT code offset if it's smaller than the JIT size;
                 // otherwise calling getBytecodeIndex() is meaningless.
                 if (jitOffset < code.size()) {

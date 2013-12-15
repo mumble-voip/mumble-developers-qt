@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -314,7 +314,7 @@ void QFontconfigDatabase::populateFontDatabase()
         const char *properties [] = {
             FC_FAMILY, FC_WEIGHT, FC_SLANT,
             FC_SPACING, FC_FILE, FC_INDEX,
-            FC_LANG, FC_CHARSET, FC_FOUNDRY, FC_SCALABLE, FC_PIXEL_SIZE, FC_WEIGHT,
+            FC_LANG, FC_CHARSET, FC_FOUNDRY, FC_SCALABLE, FC_PIXEL_SIZE,
             FC_WIDTH,
 #if FC_VERSION >= 20297
             FC_CAPABILITY,
@@ -417,13 +417,26 @@ void QFontconfigDatabase::populateFontDatabase()
         QFont::Weight weight = QFont::Weight(getFCWeight(weight_value));
 
         double pixel_size = 0;
-        if (!scalable) {
-            int width = 100;
-            FcPatternGetInteger (fonts->fonts[i], FC_WIDTH, 0, &width);
+        if (!scalable)
             FcPatternGetDouble (fonts->fonts[i], FC_PIXEL_SIZE, 0, &pixel_size);
+
+        int width = FC_WIDTH_NORMAL;
+        FcPatternGetInteger(fonts->fonts[i], FC_WIDTH, 0, &width);
+
+        QFont::Stretch stretch;
+        switch (width) {
+        case FC_WIDTH_ULTRACONDENSED: stretch = QFont::UltraCondensed; break;
+        case FC_WIDTH_EXTRACONDENSED: stretch = QFont::ExtraCondensed; break;
+        case FC_WIDTH_CONDENSED:      stretch = QFont::Condensed;      break;
+        case FC_WIDTH_SEMICONDENSED:  stretch = QFont::SemiCondensed;  break;
+        case FC_WIDTH_NORMAL:         stretch = QFont::Unstretched;    break;
+        case FC_WIDTH_SEMIEXPANDED:   stretch = QFont::SemiExpanded;   break;
+        case FC_WIDTH_EXPANDED:       stretch = QFont::Expanded;       break;
+        case FC_WIDTH_EXTRAEXPANDED:  stretch = QFont::ExtraExpanded;  break;
+        case FC_WIDTH_ULTRAEXPANDED:  stretch = QFont::UltraExpanded;  break;
+        default:                      stretch = QFont::Unstretched;    break;
         }
 
-        QFont::Stretch stretch = QFont::Unstretched;
         QPlatformFontDatabase::registerFont(familyName,QLatin1String((const char *)foundry_value),weight,style,stretch,antialias,scalable,pixel_size,writingSystems,fontFile);
 //        qDebug() << familyName << (const char *)foundry_value << weight << style << &writingSystems << scalable << true << pixel_size;
     }
@@ -576,12 +589,13 @@ QStringList QFontconfigDatabase::fallbacksForFamily(const QString family, const 
     }
 
     FcConfigSubstitute(0, pattern, FcMatchPattern);
-    FcConfigSubstitute(0, pattern, FcMatchFont);
+    FcDefaultSubstitute(pattern);
 
     FcResult result = FcResultMatch;
     FcFontSet *fontSet = FcFontSort(0,pattern,FcFalse,0,&result);
+    FcPatternDestroy(pattern);
 
-    if (fontSet && result == FcResultMatch)
+    if (fontSet)
     {
         for (int i = 0; i < fontSet->nfont; i++) {
             FcChar8 *value = 0;
@@ -592,8 +606,8 @@ QStringList QFontconfigDatabase::fallbacksForFamily(const QString family, const 
             if (!fallbackFamilies.contains(familyName,Qt::CaseInsensitive)) {
                 fallbackFamilies << familyName;
             }
-
         }
+        FcFontSetDestroy(fontSet);
     }
 //    qDebug() << "fallbackFamilies for:" << family << fallbackFamilies;
 

@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtOpenGL module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -654,6 +654,8 @@ public:
     QOpenGLPaintEnginePrivate()
         : opacity(1)
         , composition_mode(QPainter::CompositionMode_SourceOver)
+        , has_pen(false)
+        , has_brush(false)
         , has_fast_pen(false)
         , use_stencil_method(false)
         , dirty_drawable_texture(false)
@@ -1560,8 +1562,6 @@ void QOpenGLPaintEnginePrivate::updateGradient(const QBrush &brush, const QRectF
 #else
     bool has_mirrored_repeat = QGLExtensions::glExtensions() & QGLExtensions::MirroredRepeat;
     Qt::BrushStyle style = brush.style();
-
-    QTransform m = brush.transform();
 
     if (has_mirrored_repeat && style == Qt::LinearGradientPattern) {
         const QLinearGradient *g = static_cast<const QLinearGradient *>(brush.gradient());
@@ -3781,7 +3781,6 @@ void QOpenGLPaintEngine::drawLines(const QLineF *lines, int lineCount)
             } else {
                 QVarLengthArray<GLfloat> vertexArray(4 * lineCount);
                 for (int i = 0; i < lineCount; ++i) {
-                    const QPointF a = lines[i].p1();
                     vertexArray[4*i]   = lines[i].x1();
                     vertexArray[4*i+1] = lines[i].y1();
                     vertexArray[4*i+2] = lines[i].x2();
@@ -4799,14 +4798,19 @@ void QGLGlyphCache::cacheGlyphs(QGLContext *context, QFontEngine *fontEngine,
         if (it == cache->constEnd()) {
             // render new glyph and put it in the cache
             glyph_metrics_t metrics = fontEngine->boundingBox(glyphs[i]);
-            int glyph_width = qRound(metrics.width.toReal())+2;
-            int glyph_height = qRound(fontEngine->ascent().toReal() + fontEngine->descent().toReal())+2;
+            QImage glyph_im(fontEngine->alphaMapForGlyph(glyphs[i]));
+            int glyph_width = glyph_im.width();
+            int glyph_height = qRound(fontEngine->ascent().toReal() + fontEngine->descent().toReal()) + 2;
+            Q_ASSERT(glyph_width >= 0);
+            // pad the glyph width to an even number
+            if (glyph_width % 2 != 0)
+                ++glyph_width;
 
             if (font_tex->x_offset + glyph_width + x_margin > font_tex->width) {
                 int strip_height = qt_next_power_of_two(qRound(fontEngine->ascent().toReal() + fontEngine->descent().toReal())+2);
                 font_tex->x_offset = x_margin;
                 font_tex->y_offset += strip_height;
-                if (font_tex->y_offset >= font_tex->height) {
+                if (font_tex->y_offset + strip_height > font_tex->height) {
                     // get hold of the old font texture
                     uchar *old_tex_data = font_tex->data;
                     int old_tex_height = font_tex->height;
@@ -4834,12 +4838,7 @@ void QGLGlyphCache::cacheGlyphs(QGLContext *context, QFontEngine *fontEngine,
                 }
             }
 
-            QImage glyph_im(fontEngine->alphaMapForGlyph(glyphs[i]));
-            glyph_width = glyph_im.width();
-            Q_ASSERT(glyph_width >= 0);
-            // pad the glyph width to an even number
-            if (glyph_width%2 != 0)
-                ++glyph_width;
+            glyph_height = qMin(glyph_height, glyph_im.height());
 
             QGLGlyphCoord *qgl_glyph = new QGLGlyphCoord;
             qgl_glyph->x = qreal(font_tex->x_offset) / font_tex->width;
@@ -4858,8 +4857,8 @@ void QGLGlyphCache::cacheGlyphs(QGLContext *context, QFontEngine *fontEngine,
 
             if (!glyph_im.isNull()) {
                 int idx = 0;
-                uchar *tex_data = (uchar *) malloc(glyph_width*glyph_im.height()*2);
-                memset(tex_data, 0, glyph_width*glyph_im.height()*2);
+                uchar *tex_data = (uchar *) malloc(glyph_width*glyph_height*2);
+                memset(tex_data, 0, glyph_width*glyph_height*2);
 
                 bool is8BitGray = false;
 #ifdef Q_WS_QPA
@@ -4869,7 +4868,7 @@ void QGLGlyphCache::cacheGlyphs(QGLContext *context, QFontEngine *fontEngine,
 #endif
                 glyph_im = glyph_im.convertToFormat(QImage::Format_Indexed8);
                 int cacheLineStart = (font_tex->x_offset + font_tex->y_offset*font_tex->width)*2;
-                for (int y=0; y<glyph_im.height(); ++y) {
+                for (int y=0; y<glyph_height; ++y) {
                     uchar *s = (uchar *) glyph_im.scanLine(y);
                     int lineStart = idx;
                     for (int x=0; x<glyph_im.width(); ++x) {
@@ -4886,16 +4885,12 @@ void QGLGlyphCache::cacheGlyphs(QGLContext *context, QFontEngine *fontEngine,
                     cacheLineStart += font_tex->width*2;
                 }
                 glTexSubImage2D(GL_TEXTURE_2D, 0, font_tex->x_offset, font_tex->y_offset,
-                                glyph_width, glyph_im.height(),
+                                glyph_width, glyph_height,
                                 GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, tex_data);
                 free(tex_data);
             }
-            if (font_tex->x_offset + glyph_width + x_margin > font_tex->width) {
-                font_tex->x_offset = x_margin;
-                font_tex->y_offset += glyph_height + y_margin;
-            } else {
-                font_tex->x_offset += glyph_width + x_margin;
-            }
+
+            font_tex->x_offset += glyph_width + x_margin;
 
             cache->insert(glyphs[i], qgl_glyph);
         }

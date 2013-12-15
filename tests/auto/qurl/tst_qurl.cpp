@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -189,6 +189,8 @@ private slots:
     void toEncoded();
     void setAuthority_data();
     void setAuthority();
+    void setEmptyAuthority_data();
+    void setEmptyAuthority();
     void errorString();
     void clear();
     void resolvedWithAbsoluteSchemes() const;
@@ -203,7 +205,11 @@ private slots:
     void taskQTBUG_8701();
     void removeAllEncodedQueryItems_data();
     void removeAllEncodedQueryItems();
+    void detach();
+    void testThreading();
 
+private:
+    void testThreadingHelper();
 };
 
 // Testing get/set functions
@@ -271,6 +277,8 @@ void tst_QUrl::constructing()
     QVERIFY(url.isEmpty());
     QCOMPARE(url.port(), -1);
     QCOMPARE(url.toString(), QString());
+    QVERIFY(url == url);
+    QVERIFY(!(url < url));
 
     QList<QPair<QString, QString> > query;
     query += qMakePair(QString("type"), QString("login"));
@@ -348,6 +356,8 @@ void tst_QUrl::comparison()
     QVERIFY(url2.isValid());
 
     QVERIFY(url1 == url2);
+    QVERIFY(!(url1 < url2));
+    QVERIFY(!(url2 < url1));
 
     // 6.2.2 Syntax-based Normalization
     QUrl url3 = QUrl::fromEncoded("example://a/b/c/%7Bfoo%7D");
@@ -368,6 +378,7 @@ void tst_QUrl::comparison()
     QUrl url8;
     url8.setEncodedQuery("a=c");
     QVERIFY(url7 != url8);
+    QVERIFY(url7 < url8);
 }
 
 void tst_QUrl::copying()
@@ -679,6 +690,16 @@ void tst_QUrl::setUrl()
         QCOMPARE(url.host(), QString());
         QCOMPARE(url.path(), QString("text/javascript,d5 = 'five\\u0027s';"));
         QCOMPARE(url.encodedPath().constData(), "text/javascript,d5%20%3D%20'five%5Cu0027s'%3B");
+    }
+
+    {
+        // invalid port number
+        QUrl url;
+        url.setEncodedUrl("foo://tel:2147483648");
+        QVERIFY(url.isValid()); // ### should be !isValid(), but the parser can't catch it
+        QCOMPARE(url.scheme(), QString("foo"));
+        QCOMPARE(url.host(), QString("tel"));
+        QCOMPARE(url.port(), -1);
     }
 
     { //check it calls detach
@@ -2690,6 +2711,12 @@ void tst_QUrl::tolerantParser()
 
         url.setEncodedUrl("data:text/css,div%20{%20border-right:%20solid;%20}");
         QCOMPARE(url.toEncoded(), QByteArray("data:text/css,div%20%7B%20border-right:%20solid;%20%7D"));
+
+        QUrl url2 = url;
+        url2.setEncodedUrl("http://www.example.com");
+        // Check that it detached
+        QCOMPARE(url.toEncoded(), QByteArray("data:text/css,div%20%7B%20border-right:%20solid;%20%7D"));
+        QCOMPARE(url2.toEncoded(), QByteArray("http://www.example.com"));
     }
 
     {
@@ -3016,7 +3043,7 @@ void tst_QUrl::nameprep_testsuite_data()
         << QString() << 0 << 0;
 
     QTest::newRow("Non-ASCII multibyte space character U+1680")
-        << QString::fromUtf8("\xE1\x9A\x80")
+        << QString::fromUtf8("x\xE1\x9A\x80x")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
@@ -3040,13 +3067,18 @@ void tst_QUrl::nameprep_testsuite_data()
         << QString::fromUtf8("\x10\x7F")
         << QString() << 0 << 0;
 
+    QTest::newRow("Non-ASCII 8bit control character U+0080")
+        << QString::fromUtf8("x\xC2\x80x")
+        << QString()
+        << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
+
     QTest::newRow("Non-ASCII 8bit control character U+0085")
-        << QString::fromUtf8("\xC2\x85")
+        << QString::fromUtf8("x\xC2\x85x")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Non-ASCII multibyte control character U+180E")
-        << QString::fromUtf8("\xE1\xA0\x8E")
+        << QString::fromUtf8("x\xE1\xA0\x8Ex")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
@@ -3056,47 +3088,47 @@ void tst_QUrl::nameprep_testsuite_data()
         << QString() << 0 << 0;
 
     QTest::newRow("Non-ASCII control character U+1D175")
-        << QString::fromUtf8("\xF0\x9D\x85\xB5")
+        << QString::fromUtf8("x\xF0\x9D\x85\xB5x")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Plane 0 private use character U+F123")
-        << QString::fromUtf8("\xEF\x84\xA3")
+        << QString::fromUtf8("x\xEF\x84\xA3x")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Plane 15 private use character U+F1234")
-        << QString::fromUtf8("\xF3\xB1\x88\xB4")
+        << QString::fromUtf8("x\xF3\xB1\x88\xB4x")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Plane 16 private use character U+10F234")
-        << QString::fromUtf8("\xF4\x8F\x88\xB4")
+        << QString::fromUtf8("x\xF4\x8F\x88\xB4x")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Non-character code point U+8FFFE")
-        << QString::fromUtf8("\xF2\x8F\xBF\xBE")
+        << QString::fromUtf8("x\xF2\x8F\xBF\xBEx")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Non-character code point U+10FFFF")
-        << QString::fromUtf8("\xF4\x8F\xBF\xBF")
+        << QString::fromUtf8("x\xF4\x8F\xBF\xBFx")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Surrogate code U+DF42")
-        << QString::fromUtf8("\xED\xBD\x82")
+        << QString::fromUtf8("x\xED\xBD\x82x")
         << QString()
         << QString("Nameprep") << 0 <<  STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Non-plain text character U+FFFD")
-        << QString::fromUtf8("\xEF\xBF\xBD")
+        << QString::fromUtf8("x\xEF\xBF\xBDx")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Ideographic description character U+2FF5")
-        << QString::fromUtf8("\xE2\xBF\xB5")
+        << QString::fromUtf8("x\xE2\xBF\xB5x")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
@@ -3106,22 +3138,22 @@ void tst_QUrl::nameprep_testsuite_data()
         << QString() << 0 << 0;
 
     QTest::newRow("Left-to-right mark U+200E")
-        << QString::fromUtf8("\xE2\x80\x8E")
-        << QString::fromUtf8("\xCC\x81")
+        << QString::fromUtf8("x\xE2\x80\x8Ex")
+        << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Deprecated U+202A")
-        << QString::fromUtf8("\xE2\x80\xAA")
-        << QString::fromUtf8("\xCC\x81")
+        << QString::fromUtf8("x\xE2\x80\xAA")
+        << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Language tagging character U+E0001")
-        << QString::fromUtf8("\xF3\xA0\x80\x81")
-        << QString::fromUtf8("\xCC\x81")
+        << QString::fromUtf8("x\xF3\xA0\x80\x81x")
+        << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
     QTest::newRow("Language tagging character U+E0042")
-        << QString::fromUtf8("\xF3\xA0\x81\x82")
+        << QString::fromUtf8("x\xF3\xA0\x81\x82x")
         << QString()
         << QString("Nameprep") << 0 << STRINGPREP_CONTAINS_PROHIBITED;
 
@@ -3183,12 +3215,6 @@ void tst_QUrl::nameprep_testsuite()
     QFETCH(QString, out);
     QFETCH(QString, profile);
 
-    QEXPECT_FAIL("Left-to-right mark U+200E",
-                 "Investigate further", Continue);
-    QEXPECT_FAIL("Deprecated U+202A",
-                 "Investigate further", Continue);
-    QEXPECT_FAIL("Language tagging character U+E0001",
-                 "Investigate further", Continue);
     qt_nameprep(&in, 0);
     QCOMPARE(in, out);
 #endif
@@ -3219,9 +3245,9 @@ void tst_QUrl::nameprep_highcodes_data()
             << QString() << 0 << 0;
     }
     {
-        QChar st[] = { 'D', 0xdb40, 0xdc20, 'o', 0xd834, 0xdd7a, '\'', 0x2060, 'h' };
+        QChar st[] = { 'D', 'o', '\'', 0x2060, 'h' };
         QChar se[] = { 'd', 'o', '\'', 'h' };
-        QTest::newRow("highcodes (D, U+E0020, o, U+1D17A, ', U+2060, h)")
+        QTest::newRow("highcodes (D, o, ', U+2060, h)")
             << QString(st, sizeof(st)/sizeof(st[0]))
             << QString(se, sizeof(se)/sizeof(se[0]))
             << QString() << 0 << 0;
@@ -3761,6 +3787,28 @@ void tst_QUrl::setAuthority()
     QCOMPARE(u.toString(), url);
 }
 
+void tst_QUrl::setEmptyAuthority_data()
+{
+    QTest::addColumn<QString>("host");
+    QTest::addColumn<QString>("authority");
+    QTest::addColumn<QString>("expectedUrlString");
+
+    QTest::newRow("null host and authority") << QString() << QString() << QString("");
+    QTest::newRow("empty host and authority") << QString("") << QString("") << QString("//");
+}
+
+void tst_QUrl::setEmptyAuthority()
+{
+    QFETCH(QString, host);
+    QFETCH(QString, authority);
+    QFETCH(QString, expectedUrlString);
+    QUrl u;
+    u.setHost(host);
+    QCOMPARE(u.toString(), expectedUrlString);
+    u.setAuthority(authority);
+    QCOMPARE(u.toString(), expectedUrlString);
+}
+
 void tst_QUrl::errorString()
 {
     QUrl u = QUrl::fromEncoded("http://strange<username>@bad_hostname/", QUrl::StrictMode);
@@ -3869,6 +3917,10 @@ void tst_QUrl::fromUserInput_data()
     QTest::newRow("add scheme-2") << "ftp.example.org" << QUrl("ftp://ftp.example.org");
     QTest::newRow("add scheme-3") << "hostname" << QUrl("http://hostname");
 
+    // no host
+    QTest::newRow("nohost-1") << "http://" << QUrl("http://");
+    QTest::newRow("nohost-2") << "smb:" << QUrl("smb:");
+
     // QUrl's tolerant parser should already handle this
     QTest::newRow("not-encoded-0") << "http://example.org/test page.html" << QUrl::fromEncoded("http://example.org/test%20page.html");
 
@@ -3892,6 +3944,7 @@ void tst_QUrl::fromUserInput_data()
     QTest::newRow("trash-0") << "example.org/test?someData=42%&someOtherData=abcde#anchor" << QUrl::fromEncoded("http://example.org/test?someData=42%25&someOtherData=abcde#anchor");
     QTest::newRow("other-scheme-0") << "spotify:track:0hO542doVbfGDAGQULMORT" << QUrl("spotify:track:0hO542doVbfGDAGQULMORT");
     QTest::newRow("other-scheme-1") << "weirdscheme:80:otherstuff" << QUrl("weirdscheme:80:otherstuff");
+    QTest::newRow("number-path-0") << "tel:2147483648" << QUrl("tel:2147483648");
 
     // FYI: The scheme in the resulting url user
     QUrl authUrl("user:pass@domain.com");
@@ -4003,10 +4056,16 @@ void tst_QUrl::taskQTBUG_8701()
     QString foo_triple_bar("foo:///bar"), foo_uni_bar("foo:/bar");
 
     QCOMPARE(foo_triple_bar, QUrl(foo_triple_bar).toString());
+    QCOMPARE(foo_triple_bar, QString::fromUtf8(QUrl(foo_triple_bar).toEncoded()));
+
     QCOMPARE(foo_uni_bar, QUrl(foo_uni_bar).toString());
+    QCOMPARE(foo_uni_bar, QString::fromUtf8(QUrl(foo_uni_bar).toEncoded()));
 
     QCOMPARE(foo_triple_bar, QUrl(foo_triple_bar, QUrl::StrictMode).toString()); // fails
+    QCOMPARE(foo_triple_bar, QString::fromUtf8(QUrl(foo_triple_bar, QUrl::StrictMode).toEncoded())); // fails
+
     QCOMPARE(foo_uni_bar, QUrl(foo_uni_bar, QUrl::StrictMode).toString());
+    QCOMPARE(foo_uni_bar, QString::fromUtf8(QUrl(foo_uni_bar, QUrl::StrictMode).toEncoded()));
 }
 
 void tst_QUrl::effectiveTLDs_data()
@@ -4055,5 +4114,79 @@ void tst_QUrl::removeAllEncodedQueryItems()
     QCOMPARE(url, result);
 }
 
+void tst_QUrl::detach()
+{
+    QUrl empty;
+    empty.detach();
+
+    QUrl foo("http://www.kde.org");
+    QUrl foo2 = foo;
+    foo2.detach(); // not that it's needed, given that setHost detaches, of course. But this increases coverage :)
+    foo2.setHost("www.gnome.org");
+    QCOMPARE(foo2.host(), QString("www.gnome.org"));
+    QCOMPARE(foo.host(), QString("www.kde.org"));
+}
+
+// Test accessing the same QUrl from multiple threads concurrently
+// To maximize the chances of a race (and of a report from helgrind), we actually use
+// 10 urls rather than one.
+class UrlStorage
+{
+public:
+    UrlStorage() {
+        m_urls.resize(10);
+        for (int i = 0 ; i < m_urls.size(); ++i)
+            m_urls[i] = QUrl::fromEncoded("http://www.kde.org", QUrl::StrictMode);
+    }
+    QVector<QUrl> m_urls;
+};
+
+static const UrlStorage * s_urlStorage = 0;
+
+void tst_QUrl::testThreadingHelper()
+{
+    const UrlStorage* storage = s_urlStorage;
+    for (int i = 0 ; i < storage->m_urls.size(); ++i ) {
+        const QUrl& u = storage->m_urls.at(i);
+        // QVERIFY/QCOMPARE trigger race conditions in helgrind
+        if (!u.isValid())
+            qFatal("invalid url");
+        if (u.scheme() != QLatin1String("http"))
+            qFatal("invalid scheme");
+        if (!u.toString().startsWith('h'))
+            qFatal("invalid toString");
+        QUrl copy(u);
+        copy.setHost("www.new-host.com");
+        QUrl copy2(u);
+        copy2.setUserName("dfaure");
+        QUrl copy3(u);
+        copy3.setUrl("http://www.new-host.com");
+        QUrl copy4(u);
+        copy4.detach();
+        QUrl copy5(u);
+        QUrl resolved1 = u.resolved(QUrl("index.html"));
+        Q_UNUSED(resolved1);
+        QUrl resolved2 = QUrl("http://www.kde.org").resolved(u);
+        Q_UNUSED(resolved2);
+        QString local = u.toLocalFile();
+        Q_UNUSED(local);
+        QTest::qWait(10); // give time for the other threads to start
+    }
+}
+
+#include <QThreadPool>
+
+void tst_QUrl::testThreading()
+{
+    s_urlStorage = new UrlStorage;
+    QThreadPool::globalInstance()->setMaxThreadCount(100);
+    QFutureSynchronizer<void> sync;
+    for (int i = 0; i < 100; ++i)
+        sync.addFuture(QtConcurrent::run(this, &tst_QUrl::testThreadingHelper));
+    sync.waitForFinished();
+    delete s_urlStorage;
+}
+
 QTEST_MAIN(tst_QUrl)
+
 #include "tst_qurl.moc"

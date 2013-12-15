@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtDeclarative module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -45,12 +45,17 @@
 #include "private/qdeclarativeproxymetaobject_p.h"
 #include "private/qdeclarativecustomparser_p.h"
 #include "private/qdeclarativeguard_p.h"
+#include "private/qdeclarativeengine_p.h"
+#include "private/qdeclarativeitemsmodule_p.h"
+#include "private/qdeclarativeutilmodule_p.h"
 
 #include <QtCore/qdebug.h>
 #include <QtCore/qstringlist.h>
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qbitarray.h>
 #include <QtCore/qreadwritelock.h>
+#include <qfileinfo.h>
+#include <qdir.h>
 #include <qmetatype.h>
 #include <qobjectdefs.h>
 #include <qdatetime.h>
@@ -118,6 +123,14 @@ struct QDeclarativeMetaTypeData
 };
 Q_GLOBAL_STATIC(QDeclarativeMetaTypeData, metaTypeData)
 Q_GLOBAL_STATIC(QReadWriteLock, metaTypeDataLock)
+
+struct QDeclarativeRegisteredComponentData
+{
+    QMap<QByteArray, QDeclarativeDirComponents*> registeredComponents;
+};
+
+Q_GLOBAL_STATIC(QDeclarativeRegisteredComponentData, registeredComponentData)
+Q_GLOBAL_STATIC(QReadWriteLock, registeredComponentDataLock)
 
 QDeclarativeMetaTypeData::~QDeclarativeMetaTypeData()
 {
@@ -435,7 +448,7 @@ QObject *QDeclarativeType::create() const
     d->m_newFunc(rv);
 
     if (rv && !d->m_metaObjects.isEmpty())
-        (void *)new QDeclarativeProxyMetaObject(rv, &d->m_metaObjects);
+        (void)new QDeclarativeProxyMetaObject(rv, &d->m_metaObjects);
 
     return rv;
 }
@@ -448,7 +461,7 @@ void QDeclarativeType::create(QObject **out, void **memory, size_t additionalMem
     d->m_newFunc(rv);
 
     if (rv && !d->m_metaObjects.isEmpty())
-        (void *)new QDeclarativeProxyMetaObject(rv, &d->m_metaObjects);
+        (void)new QDeclarativeProxyMetaObject(rv, &d->m_metaObjects);
 
     *out = rv;
     *memory = ((char *)rv) + d->m_allocationSize;
@@ -664,6 +677,45 @@ int registerType(const QDeclarativePrivate::RegisterType &type)
     return index;
 }
 
+int registerComponent(const QDeclarativePrivate::RegisterComponent& data)
+{
+    if (data.typeName) {
+        for (int ii = 0; data.typeName[ii]; ++ii) {
+            if (!isalnum(data.typeName[ii])) {
+                qWarning("qmlRegisterType(): Invalid QML type name \"%s\"", data.typeName);
+                return 0;
+            }
+        }
+    } else {
+        qWarning("qmlRegisterType(): No QML type name for \"%s\"", data.url.toString().toLatin1().constData());
+        return 0;
+    }
+
+    QWriteLocker lock(registeredComponentDataLock());
+    QString path;
+    // Relative paths are relative to application working directory
+    if (data.url.isRelative() || data.url.scheme() == QLatin1String("file")) // Workaround QTBUG-11929
+        path = QUrl::fromLocalFile(QDir::currentPath()+QLatin1String("/")).resolved(data.url).toString();
+    else
+        path = data.url.toString();
+    QDeclarativeRegisteredComponentData *d = registeredComponentData();
+    QDeclarativeDirParser::Component comp(
+        QString::fromUtf8(data.typeName),
+        path,
+        data.majorVersion,
+        data.minorVersion
+    );
+
+    QDeclarativeDirComponents* comps = d->registeredComponents.value(QByteArray(data.uri), 0);
+    if (!comps)
+        d->registeredComponents.insert(QByteArray(data.uri), comps = new QDeclarativeDirComponents);
+
+    // Types added later should take precedence, like registerType
+    comps->prepend(comp);
+
+    return 1;
+}
+
 /*
 This method is "over generalized" to allow us to (potentially) register more types of things in
 the future without adding exported symbols.
@@ -676,6 +728,8 @@ int QDeclarativePrivate::qmlregister(RegistrationType type, void *data)
         return registerInterface(*reinterpret_cast<RegisterInterface *>(data));
     } else if (type == AutoParentRegistration) {
         return registerAutoParentFunction(*reinterpret_cast<RegisterAutoParent *>(data));
+    } else if (type == ComponentRegistration) {
+        return registerComponent(*reinterpret_cast<RegisterComponent *>(data));
     }
     return -1;
 }
@@ -690,6 +744,23 @@ int QDeclarativePrivate::qmlregister(RegistrationType type, void *data)
 */
 bool QDeclarativeMetaType::isModule(const QByteArray &module, int versionMajor, int versionMinor)
 {
+#ifndef QT_NO_IMPORT_QT47_QML
+    // "import Qt 4.7" should have died off, but unfortunately, it was in a
+    // major release. We don't register 4.7 types by default, as it's a
+    // performance penalty. Instead, register them on-demand.
+    if (strcmp(module.constData(), "Qt") == 0 && versionMajor == 4 && versionMinor == 7) {
+        static bool qt47Registered = false;
+        if (!qt47Registered) {
+            qWarning() << Q_FUNC_INFO << "Qt 4.7 import detected; please note that Qt 4.7 is directly reusable as QtQuick 1.x with no code changes. Continuing, but startup time will be slower.";
+            qt47Registered = true;
+            QDeclarativeEnginePrivate::defineModuleCompat();
+            QDeclarativeItemModule::defineModuleCompat();
+            QDeclarativeValueTypeFactory::registerValueTypesCompat();
+            QDeclarativeUtilModule::defineModuleCompat();
+        }
+    }
+#endif
+
     QDeclarativeMetaTypeData *data = metaTypeData();
     QDeclarativeMetaTypeData::ModuleInfoHash::Iterator it = data->modules.find(module);
     return it != data->modules.end()
@@ -962,6 +1033,29 @@ QDeclarativeType *QDeclarativeMetaType::qmlType(int userType)
     else
         return 0;
 }
+
+/*!
+    Returns the component(s) that have been registered for the module specified by \a uri and the version specified
+    by \a version_major and \a version_minor.  Returns an empty list if no such components were registered.
+*/
+QDeclarativeDirComponents QDeclarativeMetaType::qmlComponents(const QByteArray &module, int version_major, int version_minor)
+{
+    QReadLocker lock(registeredComponentDataLock());
+    QDeclarativeRegisteredComponentData *data = registeredComponentData();
+
+    QDeclarativeDirComponents* comps = data->registeredComponents.value(module, 0);
+    if (!comps)
+        return QDeclarativeDirComponents();
+    QDeclarativeDirComponents ret = *comps;
+    for (int i = ret.count() - 1; i >= 0; i--) {
+        QDeclarativeDirParser::Component &c = ret[i];
+        if (version_major >= 0 && (c.majorVersion != version_major || c.minorVersion > version_minor))
+            ret.removeAt(i);
+    }
+
+    return ret;
+}
+
 
 /*!
     Returns the list of registered QML type names.

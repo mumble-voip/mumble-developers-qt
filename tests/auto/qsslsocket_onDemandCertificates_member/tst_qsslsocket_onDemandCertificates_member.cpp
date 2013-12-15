@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -46,7 +46,10 @@
 #include <QNetworkProxy>
 #include <QAuthenticator>
 
+#ifdef QT_BUILD_INTERNAL
 #include "private/qhostinfo_p.h"
+#include "private/qsslsocket_p.h"
+#endif
 
 #include "../network-settings.h"
 
@@ -196,7 +199,7 @@ void tst_QSslSocket_onDemandCertificates_member::proxyAuthenticationRequired(con
 
 void tst_QSslSocket_onDemandCertificates_member::onDemandRootCertLoadingMemberMethods()
 {
-    QString host("qt.nokia.com");
+    QString host("qt-project.org");
 
     // not using any root certs -> should not work
     QSslSocketPtr socket2 = newSocket();
@@ -218,12 +221,31 @@ void tst_QSslSocket_onDemandCertificates_member::onDemandRootCertLoadingMemberMe
     socket3->connectToHostEncrypted(host, 443);
     QVERIFY(!socket3->waitForEncrypted());
 
-    // setting empty SSL configuration explicitly -> should not work
+    // setting empty SSL configuration explicitly -> depends on on-demand loading
     QSslSocketPtr socket4 = newSocket();
-    this->socket = socket4;
-    socket4->setSslConfiguration(QSslConfiguration());
+    this->socket = socket4.data();
+    QSslConfiguration conf;
+    socket4->setSslConfiguration(conf);
     socket4->connectToHostEncrypted(host, 443);
-    QVERIFY(!socket4->waitForEncrypted());
+#ifdef QT_BUILD_INTERNAL
+    bool rootCertLoadingAllowed = QSslSocketPrivate::rootCertOnDemandLoadingSupported();
+#if defined(Q_OS_LINUX) || defined (Q_OS_BLACKBERRY)
+    QCOMPARE(rootCertLoadingAllowed, true);
+#elif defined(Q_OS_MAC)
+    QCOMPARE(rootCertLoadingAllowed, false);
+#endif // other platforms: undecided (Windows: depends on the version)
+    // when we allow on demand loading, it is enabled by default,
+    // so on Unix it will work without setting any certificates. Otherwise,
+    // the configuration contains an empty set of certificates
+    // and will fail.
+    bool works;
+#if defined (Q_OS_WIN)
+    works = false; // on Windows, this won't work even though we use on demand loading
+#else
+    works = rootCertLoadingAllowed;
+#endif
+    QCOMPARE(socket4->waitForEncrypted(), works);
+#endif // QT_BUILD_INTERNAL
 }
 
 #endif // QT_NO_OPENSSL

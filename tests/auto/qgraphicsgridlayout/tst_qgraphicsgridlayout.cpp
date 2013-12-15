@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -126,6 +126,7 @@ private slots:
     void spanningItem2x3_data();
     void spanningItem2x3();
     void spanningItem();
+    void spanAcrossEmptyRow();
     void heightForWidth();
     void widthForHeight();
     void heightForWidthWithSpanning();
@@ -3183,23 +3184,19 @@ void tst_QGraphicsGridLayout::heightForWidthWithSpanning()
 
     QCOMPARE(layout->effectiveSizeHint(Qt::MinimumSize, QSizeF(-1, -1)), QSizeF(1, 1));
     QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize, QSizeF(-1, -1)), QSizeF(200, 100));
-    QEXPECT_FAIL("", "Due to an old bug this wrongly returns QWIDGETSIZE_MAX", Continue);
     QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize, QSizeF(-1, -1)), QSizeF(30000, 30000));
 
     QCOMPARE(layout->effectiveSizeHint(Qt::MinimumSize, QSizeF(200, -1)), QSizeF(200, 100));
     QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize, QSizeF(200, -1)), QSizeF(200, 100));
-    QEXPECT_FAIL("", "Due to an old bug this wrongly returns QWIDGETSIZE_MAX", Continue);
     QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize, QSizeF(200, -1)), QSizeF(200, 100));
 
     QCOMPARE(layout->effectiveSizeHint(Qt::MinimumSize, QSizeF(2, -1)), QSizeF(2, 10000));
     QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize, QSizeF(2, -1)), QSizeF(2, 10000));
-    QEXPECT_FAIL("", "Due to an old bug this wrongly returns QWIDGETSIZE_MAX", Continue);
     QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize, QSizeF(2, -1)), QSizeF(2, 10000));
 
     QCOMPARE(layout->effectiveSizeHint(Qt::MinimumSize, QSizeF(200, -1)), QSizeF(200, 100));
     QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize, QSizeF(200, -1)), QSizeF(200, 100));
-    QEXPECT_FAIL("", "Due to an old bug this wrongly returns QWIDGETSIZE_MAX", Continue);
-    QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize, QSizeF(200, -1)), QSizeF(200, 10000));
+    QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize, QSizeF(200, -1)), QSizeF(200, 100));
 }
 
 Q_DECLARE_METATYPE(QSizePolicy::Policy)
@@ -3353,6 +3350,37 @@ void tst_QGraphicsGridLayout::spanningItem()
 
     QCOMPARE(layout->minimumSize(), QSizeF(160,80));
     QCOMPARE(layout->maximumSize(), QSizeF(160,80));
+}
+
+void tst_QGraphicsGridLayout::spanAcrossEmptyRow()
+{
+    QGraphicsWidget *form = new QGraphicsWidget(0, Qt::Window);
+    QGraphicsGridLayout *layout = new QGraphicsGridLayout(form);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    RectWidget *w1 = new RectWidget;
+    RectWidget *w2 = new RectWidget;
+    RectWidget *w3 = new RectWidget;
+
+    QSizeF size(10, 10);
+    for (int i = 0; i < 3; ++i) {
+        w1->setSizeHint((Qt::SizeHint)i, size);
+        w2->setSizeHint((Qt::SizeHint)i, size);
+        w3->setSizeHint((Qt::SizeHint)i, size);
+        size+=size;                 //[(10,10), (20,20), (40,40)]
+    }
+    layout->addItem(w1, 0, 0, 1, 1);
+    layout->addItem(w2, 0, 1, 1, 2);
+    layout->addItem(w3, 0, 99, 1, 1);
+
+    form->resize(60,20);
+    QCOMPARE(w1->geometry(), QRectF( 0, 0, 20, 20));
+    QCOMPARE(w2->geometry(), QRectF(20, 0, 20, 20));
+    QCOMPARE(w3->geometry(), QRectF(40, 0, 20, 20));
+
+    QCOMPARE(layout->effectiveSizeHint(Qt::MinimumSize), QSizeF(30, 10));
+    QCOMPARE(layout->effectiveSizeHint(Qt::PreferredSize), QSizeF(60, 20));
+    QCOMPARE(layout->effectiveSizeHint(Qt::MaximumSize), QSizeF(120, 40));
 }
 
 void tst_QGraphicsGridLayout::stretchAndHeightForWidth()

@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -143,6 +143,11 @@ static inline int qpainterOpToXrender(QPainter::CompositionMode mode)
 {
     Q_ASSERT(mode <= QPainter::CompositionMode_Xor);
     return compositionModeToRenderOp[mode];
+}
+
+static inline bool complexPictOp(int op)
+{
+    return op != PictOpOver && op != PictOpSrc;
 }
 #endif
 
@@ -771,7 +776,11 @@ void QX11PaintEngine::drawRects(const QRectF *rects, int rectCount)
         || d->has_alpha_brush
         || d->has_complex_xform
         || d->has_custom_pen
-        || d->cbrush.style() != Qt::SolidPattern)
+        || d->cbrush.style() != Qt::SolidPattern
+#if !defined(QT_NO_XRENDER)
+        || complexPictOp(d->composition_mode)
+#endif
+       )
     {
         QPaintEngine::drawRects(rects, rectCount);
         return;
@@ -838,7 +847,7 @@ void QX11PaintEngine::drawRects(const QRect *rects, int rectCount)
     ::Picture pict = d->picture;
 
     if (X11->use_xrender && pict && d->has_brush && d->pdev_depth != 1
-        && (d->has_texture || d->has_alpha_brush))
+        && (d->has_texture || d->has_alpha_brush || complexPictOp(d->composition_mode)))
     {
         XRenderColor xc;
         if (!d->has_texture && !d->has_pattern)
@@ -2312,7 +2321,7 @@ static QPainterPath path_for_glyphs(const QVarLengthArray<glyph_t> &glyphs,
     ft->lockFace();
     int i = 0;
     while (i < glyphs.size()) {
-        QFontEngineFT::Glyph *glyph = ft->loadGlyph(glyphs[i], QFontEngineFT::Format_Mono);
+        QFontEngineFT::Glyph *glyph = ft->loadGlyph(glyphs[i], 0, QFontEngineFT::Format_Mono);
         // #### fix case where we don't get a glyph
         if (!glyph)
             break;

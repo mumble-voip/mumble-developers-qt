@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -43,6 +43,24 @@
 #include <qthreadpool.h>
 #include <qstring.h>
 #include <qmutex.h>
+
+// From Qt5
+
+#define QTRY_COMPARE_WITH_TIMEOUT(__expr, __expected, __timeout) \
+    do { \
+            const int __step = 50; \
+            const int __timeoutValue = __timeout; \
+            if ((__expr) != (__expected)) { \
+                        QTest::qWait(0); \
+                    } \
+            for (int __i = 0; __i < __timeoutValue && ((__expr) != (__expected)); __i+=__step) { \
+                        QTest::qWait(__step); \
+                    } \
+            QCOMPARE(__expr, __expected); \
+    } while (0)
+
+#define QTRY_COMPARE(__expr, __expected) QTRY_COMPARE_WITH_TIMEOUT(__expr, __expected, 5000)
+
 
 typedef void (*FunctionPointer)();
 
@@ -64,6 +82,12 @@ QRunnable *createTask(FunctionPointer pointer)
 class tst_QThreadPool : public QObject
 {
     Q_OBJECT
+public:
+    tst_QThreadPool();
+    ~tst_QThreadPool();
+
+    static QMutex *functionTestMutex;
+
 private slots:
     void runFunction();
     void createThreadRunFunction();
@@ -74,6 +98,7 @@ private slots:
     void destruction();
     void threadRecycling();
     void expiryTimeout();
+    void expiryTimeoutRace();
     void exceptions();
     void maxThreadCount();
     void setMaxThreadCount_data();
@@ -84,6 +109,7 @@ private slots:
     void reserveThread();
     void releaseThread_data();
     void releaseThread();
+    void reserveAndStart();
     void start();
     void tryStart();
     void tryStartPeakThreadCount();
@@ -92,7 +118,23 @@ private slots:
     void waitForDoneTimeout();
     void destroyingWaitsForTasksToFinish();
     void stressTest();
+
+private:
+    QMutex m_functionTestMutex;
 };
+
+
+QMutex *tst_QThreadPool::functionTestMutex = 0;
+
+tst_QThreadPool::tst_QThreadPool()
+{
+    tst_QThreadPool::functionTestMutex = &m_functionTestMutex;
+}
+
+tst_QThreadPool::~tst_QThreadPool()
+{
+    tst_QThreadPool::functionTestMutex = 0;
+}
 
 int testFunctionCount;
 
@@ -114,19 +156,19 @@ void noSleepTestFunction()
 
 void sleepTestFunctionMutex()
 {
-    static QMutex testMutex;
+    Q_ASSERT(tst_QThreadPool::functionTestMutex);
     QTest::qSleep(1000);
-    testMutex.lock();
+    tst_QThreadPool::functionTestMutex->lock();
     ++testFunctionCount;
-    testMutex.unlock();
+    tst_QThreadPool::functionTestMutex->unlock();
 }
 
 void noSleepTestFunctionMutex()
 {
-    static QMutex testMutex;
-    testMutex.lock();
+    Q_ASSERT(tst_QThreadPool::functionTestMutex);
+    tst_QThreadPool::functionTestMutex->lock();
     ++testFunctionCount;
-    testMutex.unlock();
+    tst_QThreadPool::functionTestMutex->unlock();
 }
 
 void tst_QThreadPool::runFunction()
@@ -292,7 +334,7 @@ class ExpiryTimeoutTask : public QRunnable
 {
 public:
     QThread *thread;
-    int runCount;
+    QAtomicInt runCount;
     QSemaphore semaphore;
 
     ExpiryTimeoutTask()
@@ -304,7 +346,7 @@ public:
     void run()
     {
         thread = QThread::currentThread();
-        ++runCount;
+        runCount.ref();
         semaphore.release();
     }
 };
@@ -323,7 +365,7 @@ void tst_QThreadPool::expiryTimeout()
     // run the task
     threadPool.start(&task);
     QVERIFY(task.semaphore.tryAcquire(1, 10000));
-    QCOMPARE(task.runCount, 1);
+    QCOMPARE(int(task.runCount), 1);
     QVERIFY(!task.thread->wait(100));
     // thread should expire
     QThread *firstThread = task.thread;
@@ -332,7 +374,7 @@ void tst_QThreadPool::expiryTimeout()
     // run task again, thread should be restarted
     threadPool.start(&task);
     QVERIFY(task.semaphore.tryAcquire(1, 10000));
-    QCOMPARE(task.runCount, 2);
+    QCOMPARE(int(task.runCount), 2);
     QVERIFY(!task.thread->wait(100));
     // thread should expire again
     QVERIFY(task.thread->wait(10000));
@@ -343,6 +385,22 @@ void tst_QThreadPool::expiryTimeout()
 
     threadPool.setExpiryTimeout(expiryTimeout);
     QCOMPARE(threadPool.expiryTimeout(), expiryTimeout);
+}
+
+void tst_QThreadPool::expiryTimeoutRace() // QTBUG-3786
+{
+    ExpiryTimeoutTask task;
+
+    QThreadPool threadPool;
+    threadPool.setMaxThreadCount(1);
+    threadPool.setExpiryTimeout(50);
+    const int numTasks = 20;
+    for (int i = 0; i < numTasks; ++i) {
+        threadPool.start(&task);
+        QTest::qSleep(50); // exactly the same as the expiry timeout
+    }
+    QCOMPARE(int(task.runCount), numTasks);
+    QVERIFY(threadPool.waitForDone(2000));
 }
 
 #ifndef QT_NO_EXCEPTIONS
@@ -622,6 +680,61 @@ void tst_QThreadPool::releaseThread()
     }
 
     // reset limit on global QThreadPool
+    threadpool->setMaxThreadCount(savedLimit);
+}
+
+void tst_QThreadPool::reserveAndStart() // QTBUG-21051
+{
+    class WaitingTask : public QRunnable
+    {
+    public:
+        QAtomicInt count;
+        QSemaphore waitForStarted;
+
+        WaitingTask() { setAutoDelete(false); }
+
+        void run()
+        {
+            count.ref();
+            waitForStarted.release();
+        }
+    };
+
+    // Set up
+    QThreadPool *threadpool = QThreadPool::globalInstance();
+    int savedLimit = threadpool->maxThreadCount();
+    threadpool->setMaxThreadCount(1);
+    QCOMPARE(threadpool->activeThreadCount(), 0);
+
+    // reserve
+    threadpool->reserveThread();
+    QCOMPARE(threadpool->activeThreadCount(), 1);
+
+    // start a task, to get a running thread
+    WaitingTask *task = new WaitingTask;
+    threadpool->start(task);
+    QCOMPARE(threadpool->activeThreadCount(), 2);
+    task->waitForStarted.acquire();
+    QTRY_COMPARE(int(task->count), 1);
+    QTRY_COMPARE(threadpool->activeThreadCount(), 1);
+
+    // now the thread is waiting, but tryStart() will fail since activeThreadCount() >= maxThreadCount()
+    QVERIFY(!threadpool->tryStart(task));
+    QTRY_COMPARE(threadpool->activeThreadCount(), 1);
+
+    // start() will therefore do a failing tryStart(), followed by enqueueTask()
+    // which will actually wake up the waiting thread.
+    threadpool->start(task);
+    QTRY_COMPARE(threadpool->activeThreadCount(), 2);
+    task->waitForStarted.acquire();
+    QTRY_COMPARE(int(task->count), 2);
+    QTRY_COMPARE(threadpool->activeThreadCount(), 1);
+
+    threadpool->releaseThread();
+    QTRY_COMPARE(threadpool->activeThreadCount(), 0);
+
+    delete task;
+
     threadpool->setMaxThreadCount(savedLimit);
 }
 

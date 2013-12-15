@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -80,7 +80,7 @@ public:
 void tst_QCoreApplication::sendEventsOnProcessEvents()
 {
     int argc = 1;
-    char *argv[] = { "tst_qcoreapplication" };
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     QCoreApplication app(argc, argv);
 
     EventSpy spy;
@@ -102,7 +102,7 @@ void tst_QCoreApplication::getSetCheck()
     // Test the property
     {
         int argc = 1;
-        char *argv[] = { "tst_qcoreapplication" };
+        char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
         QCoreApplication app(argc, argv);
         QCOMPARE(app.property("applicationVersion").toString(), v);
     }
@@ -114,7 +114,7 @@ void tst_QCoreApplication::getSetCheck()
 void tst_QCoreApplication::qAppName()
 {
     int argc = 1;
-    char *argv[] = { "tst_qcoreapplication" };
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     QCoreApplication app(argc, argv);
     QVERIFY(!::qAppName().isEmpty());
 }
@@ -123,7 +123,7 @@ void tst_QCoreApplication::argc()
 {
     {
         int argc = 1;
-        char *argv[] = { "tst_qcoreapplication" };
+        char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
         QCoreApplication app(argc, argv);
         QCOMPARE(argc, 1);
         QCOMPARE(app.argc(), 1);
@@ -131,7 +131,7 @@ void tst_QCoreApplication::argc()
 
     {
         int argc = 4;
-        char *argv[] = { "tst_qcoreapplication", "arg1", "arg2", "arg3" };
+        char *argv[] = { const_cast<char*>(QTest::currentAppName()), "arg1", "arg2", "arg3" };
         QCoreApplication app(argc, argv);
         QCOMPARE(argc, 4);
         QCOMPARE(app.argc(), 4);
@@ -147,7 +147,7 @@ void tst_QCoreApplication::argc()
 
     {
         int argc = 2;
-        char *argv[] = { "tst_qcoreapplication", "-qmljsdebugger=port:3768,block" };
+        char *argv[] = { const_cast<char*>(QTest::currentAppName()), "-qmljsdebugger=port:3768,block" };
         QCoreApplication app(argc, argv);
         QCOMPARE(argc, 1);
         QCOMPARE(app.argc(), 1);
@@ -179,7 +179,7 @@ public:
 void tst_QCoreApplication::postEvent()
 {
     int argc = 1;
-    char *argv[] = { "tst_qcoreapplication" };
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     QCoreApplication app(argc, argv);
 
     EventSpy spy;
@@ -264,7 +264,7 @@ void tst_QCoreApplication::postEvent()
 void tst_QCoreApplication::removePostedEvents()
 {
     int argc = 1;
-    char *argv[] = { "tst_qcoreapplication" };
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     QCoreApplication app(argc, argv);
 
     EventSpy spy;
@@ -431,7 +431,7 @@ public:
 void tst_QCoreApplication::deliverInDefinedOrder()
 {
     int argc = 1;
-    char *argv[] = { "tst_qcoreapplication" };
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     QCoreApplication app(argc, argv);
 
     DeliverInDefinedOrderObject obj(&app);
@@ -474,7 +474,7 @@ public:
 void tst_QCoreApplication::globalPostedEventsCount()
 {
     int argc = 1;
-    char *argv[] = { "tst_qcoreapplication" };
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     QCoreApplication app(argc, argv);
 
     QCoreApplication::sendPostedEvents();
@@ -520,7 +520,7 @@ public:
 void tst_QCoreApplication::processEventsAlwaysSendsPostedEvents()
 {
     int argc = 1;
-    char *argv[] = { "tst_qcoreapplication" };
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     QCoreApplication app(argc, argv);
 
     ProcessEventsAlwaysSendsPostedEventsObject object;
@@ -538,7 +538,7 @@ void tst_QCoreApplication::processEventsAlwaysSendsPostedEvents()
 void tst_QCoreApplication::reexec()
 {
     int argc = 1;
-    char *argv[] = { "tst_qcoreapplication" };
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     QCoreApplication app(argc, argv);
 
     // exec once
@@ -553,7 +553,7 @@ void tst_QCoreApplication::reexec()
 void tst_QCoreApplication::execAfterExit()
 {
     int argc = 1;
-    char *argv[] = { "tst_qcoreapplication" };
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     QCoreApplication app(argc, argv);
 
     app.exit(1);
@@ -564,7 +564,7 @@ void tst_QCoreApplication::execAfterExit()
 void tst_QCoreApplication::eventLoopExecAfterExit()
 {
     int argc = 1;
-    char *argv[] = { "tst_qcoreapplication" };
+    char *argv[] = { const_cast<char*>(QTest::currentAppName()) };
     QCoreApplication app(argc, argv);
 
     // exec once and exit
@@ -576,6 +576,19 @@ void tst_QCoreApplication::eventLoopExecAfterExit()
     QMetaObject::invokeMethod(&loop, "quit", Qt::QueuedConnection);
     QCOMPARE(loop.exec(), 0);
 }
+
+static void createQObjectOnDestruction()
+{
+    // Make sure that we can create a QObject after the last QObject has been
+    // destroyed (especially after QCoreApplication has).
+    //
+    // Before the fixes, this would cause a dangling pointer dereference. If
+    // the problem comes back, it's possible that the following causes no
+    // effect.
+    QObject obj;
+    obj.thread()->setProperty("testing", 1);
+}
+Q_DESTRUCTOR_FUNCTION(createQObjectOnDestruction)
 
 QTEST_APPLESS_MAIN(tst_QCoreApplication)
 #include "tst_qcoreapplication.moc"

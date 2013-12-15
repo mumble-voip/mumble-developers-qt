@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtNetwork module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -40,6 +40,7 @@
 ****************************************************************************/
 
 //#define QSSLSOCKET_DEBUG
+//#define QT_DECRYPT_SSL_TRAFFIC
 
 #include "qsslsocket_openssl_p.h"
 #include "qsslsocket_openssl_symbols_p.h"
@@ -68,7 +69,7 @@
 #endif
 QT_BEGIN_NAMESPACE
 
-#if defined(Q_OS_MAC) && !defined(QT_NO_CORESERVICES)
+#if defined(Q_OS_MAC) && !defined(Q_OS_IOS)
 #define kSecTrustSettingsDomainSystem 2 // so we do not need to include the header file
     PtrSecCertificateGetData QSslSocketPrivate::ptrSecCertificateGetData = 0;
     PtrSecTrustSettingsCopyCertificates QSslSocketPrivate::ptrSecTrustSettingsCopyCertificates = 0;
@@ -236,8 +237,12 @@ static int q_X509Callback(int ok, X509_STORE_CTX *ctx)
 {
     if (!ok) {
         // Store the error and at which depth the error was detected.
-		if ((ctx->error_depth != 0) || (ctx->error != X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) || (ctx->param->purpose != 0) || (ctx->param->trust != 0))
-	        _q_sslErrorList()->errors << qMakePair<int, int>(ctx->error, ctx->error_depth);
+	int error = q_X509_STORE_CTX_get_error(ctx);
+	int error_depth = q_X509_STORE_CTX_get_error_depth(ctx);
+	X509_VERIFY_PARAM *param = X509_STORE_CTX_get0_param(ctx);
+	if ((error_depth != 0) || (error != X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) || (param->purpose != 0) || (param->trust != 0)) {
+	        _q_sslErrorList()->errors << qMakePair<int, int>(error, error_depth);
+	}
     }
     // Always return OK to allow verification to continue. We're handle the
     // errors gracefully after collecting all errors, after verification has
@@ -581,7 +586,7 @@ void QSslSocketPrivate::ensureCiphersAndCertsLoaded()
     resetDefaultCiphers();
 
     //load symbols needed to receive certificates from system store
-#if defined(Q_OS_MAC) && !defined(QT_NO_CORESERVICES)
+#if defined(Q_OS_MAC) && !defined(Q_OS_IOS)
     QLibrary securityLib("/System/Library/Frameworks/Security.framework/Versions/Current/Security");
     if (securityLib.load()) {
         ptrSecCertificateGetData = (PtrSecCertificateGetData) securityLib.resolve("SecCertificateGetData");
@@ -614,6 +619,8 @@ void QSslSocketPrivate::ensureCiphersAndCertsLoaded()
     } else {
         qWarning("could not load crypt32 library"); // should never happen
     }
+#elif defined(Q_OS_QNX)
+    s_loadRootCertsOnDemand = true;
 #elif defined(Q_OS_UNIX) && !defined(Q_OS_SYMBIAN) && !defined(Q_OS_MAC)
     // check whether we can enable on-demand root-cert loading (i.e. check whether the sym links are there)
     QList<QByteArray> dirs = unixRootCertDirectories();
@@ -862,7 +869,7 @@ QList<QSslCertificate> QSslSocketPrivate::systemCaCertificates()
     timer.start();
 #endif
     QList<QSslCertificate> systemCerts;
-#if defined(Q_OS_MAC) && !defined(QT_NO_CORESERVICES)
+#if defined(Q_OS_MAC) && !defined(Q_OS_IOS)
     CFArrayRef cfCerts;
     OSStatus status = 1;
 
@@ -1163,8 +1170,11 @@ void QSslSocketBackendPrivate::transmit()
 #ifdef QSSLSOCKET_DEBUG
                 qDebug() << "QSslSocketBackendPrivate::transmit: remote disconnect";
 #endif
-                plainSocket->disconnectFromHost();
-                break;
+                shutdown = true; // the other side shut down, make sure we do not send shutdown ourselves
+                q->setErrorString(QSslSocket::tr("The TLS/SSL connection has been closed"));
+                q->setSocketError(QAbstractSocket::RemoteHostClosedError);
+                emit q->error(QAbstractSocket::RemoteHostClosedError);
+                return;
             case SSL_ERROR_SYSCALL: // some IO error
             case SSL_ERROR_SSL: // error in the SSL library
                 // we do not know exactly what the error is, nor whether we can recover from it,
@@ -1404,6 +1414,40 @@ bool QSslSocketBackendPrivate::startHandshake()
     if (readBufferMaxSize)
         plainSocket->setReadBufferSize(32768);
 
+#ifdef QT_DECRYPT_SSL_TRAFFIC
+    if (ssl->session && ssl->s3) {
+        const char *mk = reinterpret_cast<const char *>(ssl->session->master_key);
+        QByteArray masterKey(mk, ssl->session->master_key_length);
+        const char *random = reinterpret_cast<const char *>(ssl->s3->client_random);
+        QByteArray clientRandom(random, SSL3_RANDOM_SIZE);
+
+        // different format, needed for e.g. older Wireshark versions:
+//        const char *sid = reinterpret_cast<const char *>(ssl->session->session_id);
+//        QByteArray sessionID(sid, ssl->session->session_id_length);
+//        QByteArray debugLineRSA("RSA Session-ID:");
+//        debugLineRSA.append(sessionID.toHex().toUpper());
+//        debugLineRSA.append(" Master-Key:");
+//        debugLineRSA.append(masterKey.toHex().toUpper());
+//        debugLineRSA.append("\n");
+
+        QByteArray debugLineClientRandom("CLIENT_RANDOM ");
+        debugLineClientRandom.append(clientRandom.toHex().toUpper());
+        debugLineClientRandom.append(" ");
+        debugLineClientRandom.append(masterKey.toHex().toUpper());
+        debugLineClientRandom.append("\n");
+
+        QString sslKeyFile = QDir::tempPath() + QLatin1String("/qt-ssl-keys");
+        QFile file(sslKeyFile);
+        if (!file.open(QIODevice::Append))
+            qWarning() << "could not open file" << sslKeyFile << "for appending";
+        if (!file.write(debugLineClientRandom))
+            qWarning() << "could not write to file" << sslKeyFile;
+        file.close();
+    } else {
+        qWarning("could not decrypt SSL traffic");
+    }
+#endif
+
     connectionEncrypted = true;
     emit q->encrypted();
     if (autoStartHandshake && pendingClose) {
@@ -1416,8 +1460,11 @@ bool QSslSocketBackendPrivate::startHandshake()
 void QSslSocketBackendPrivate::disconnectFromHost()
 {
     if (ssl) {
-        q_SSL_shutdown(ssl);
-        transmit();
+        if (!shutdown) {
+            q_SSL_shutdown(ssl);
+            shutdown = true;
+            transmit();
+        }
     }
     plainSocket->disconnectFromHost();
 }

@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -1852,6 +1852,15 @@ void QCommonListViewBase::removeHiddenRow(int row)
     dd->hiddenRows.remove(dd->model->index(row, 0, qq->rootIndex()));
 }
 
+#ifndef QT_NO_DRAGANDDROP
+void QCommonListViewBase::paintDragDrop(QPainter *painter)
+{
+    // FIXME: Until the we can provide a proper drop indicator
+    // in IconMode, it makes no sense to show it
+    dd->paintDropIndicator(painter);
+}
+#endif
+
 void QCommonListViewBase::updateHorizontalScrollBar(const QSize &step)
 {
     horizontalScrollBar()->setSingleStep(step.width() + spacing());
@@ -1921,13 +1930,6 @@ int QCommonListViewBase::horizontalScrollToValue(const int /*index*/, QListView:
 */
 
 #ifndef QT_NO_DRAGANDDROP
-void QListModeViewBase::paintDragDrop(QPainter *painter)
-{
-    // FIXME: Until the we can provide a proper drop indicator
-    // in IconMode, it makes no sense to show it
-    dd->paintDropIndicator(painter);
-}
-
 QAbstractItemView::DropIndicatorPosition QListModeViewBase::position(const QPoint &pos, const QRect &rect, const QModelIndex &index) const
 {
     QAbstractItemView::DropIndicatorPosition r = QAbstractItemView::OnViewport;
@@ -2133,10 +2135,16 @@ int QListModeViewBase::verticalScrollToValue(int index, QListView::ScrollHint hi
 {
     if (verticalScrollMode() == QAbstractItemView::ScrollPerItem) {
         int value;
-        if (scrollValueMap.isEmpty())
+        if (scrollValueMap.isEmpty()) {
             value = 0;
-        else
-            value = qBound(0, scrollValueMap.at(verticalScrollBar()->value()), flowPositions.count() - 1);
+        } else {
+            int scrollBarValue = verticalScrollBar()->value();
+            int numHidden = 0;
+            for (int i = 0; i < flowPositions.count() - 1 && i <= scrollBarValue; ++i)
+                if (isHidden(i))
+                    ++numHidden;
+            value = qBound(0, scrollValueMap.at(verticalScrollBar()->value()) - numHidden, flowPositions.count() - 1);
+        }
         if (above)
             hint = QListView::PositionAtTop;
         else if (below)
@@ -2299,7 +2307,7 @@ QListViewItem QListModeViewBase::indexToListViewItem(const QModelIndex &index) c
                      : segmentPositions.at(segment + 1));
             size.setWidth(right - pos.x());
         } else { // make the items as wide as the viewport
-            size.setWidth(qMax(size.width(), viewport()->width()));
+            size.setWidth(qMax(size.width(), viewport()->width() - 2 * spacing()));
         }
     }
 
@@ -2558,13 +2566,21 @@ int QListModeViewBase::perItemScrollToValue(int index, int scrollValue, int view
 {
     if (index < 0)
         return scrollValue;
+
+    QVector<int> visibleFlowPositions;
+    visibleFlowPositions.reserve(flowPositions.count() - 1);
+    for (int i = 0; i < flowPositions.count() - 1; i++) { // flowPositions count is +1 larger than actual row count
+        if (!isHidden(i))
+            visibleFlowPositions.append(flowPositions.at(i));
+    }
+
     if (!wrap) {
         int topIndex = index;
         const int bottomIndex = topIndex;
-        const int bottomCoordinate = flowPositions.at(index);
+        const int bottomCoordinate = visibleFlowPositions.at(index);
 
         while (topIndex > 0 &&
-            (bottomCoordinate - flowPositions.at(topIndex-1) + itemExtent) <= (viewportSize)) {
+               (bottomCoordinate - visibleFlowPositions.at(topIndex - 1) + itemExtent) <= (viewportSize)) {
             topIndex--;
         }
 
@@ -2584,7 +2600,7 @@ int QListModeViewBase::perItemScrollToValue(int index, int scrollValue, int view
                                            ? Qt::Horizontal : Qt::Vertical);
         if (flowOrientation == orientation) { // scrolling in the "flow" direction
             // ### wrapped scrolling in the flow direction
-            return flowPositions.at(index); // ### always pixel based for now
+            return visibleFlowPositions.at(index); // ### always pixel based for now
         } else if (!segmentStartRows.isEmpty()) { // we are scrolling in the "segment" direction
             int segment = qBinarySearch<int>(segmentStartRows, index, 0, segmentStartRows.count() - 1);
             int leftSegment = segment;
@@ -2655,23 +2671,6 @@ void QIconModeViewBase::removeHiddenRow(int row)
 }
 
 #ifndef QT_NO_DRAGANDDROP
-void QIconModeViewBase::paintDragDrop(QPainter *painter)
-{
-    if (!draggedItems.isEmpty() && viewport()->rect().contains(draggedItemsPos)) {
-        //we need to draw the items that arre dragged
-        painter->translate(draggedItemsDelta());
-        QStyleOptionViewItemV4 option = viewOptions();
-        option.state &= ~QStyle::State_MouseOver;
-        QVector<QModelIndex>::const_iterator it = draggedItems.begin();
-        QListViewItem item = indexToListViewItem(*it);
-        for (; it != draggedItems.end(); ++it) {
-            item = indexToListViewItem(*it);
-            option.rect = viewItemRect(item);
-            delegate(*it)->paint(painter, option, *it);
-        }
-    }
-}
-
 bool QIconModeViewBase::filterStartDrag(Qt::DropActions supportedActions)
 {
     // This function does the same thing as in QAbstractItemView::startDrag(),
@@ -2686,7 +2685,14 @@ bool QIconModeViewBase::filterStartDrag(Qt::DropActions supportedActions)
                     && (*it).column() == dd->column)
                     draggedItems.push_back(*it);
         }
+
+        QRect rect;
+        QPixmap pixmap = dd->renderToPixmap(indexes, &rect);
+        rect.adjust(horizontalOffset(), verticalOffset(), 0, 0);
+
         QDrag *drag = new QDrag(qq);
+        drag->setPixmap(pixmap);
+        drag->setHotSpot(dd->pressedPosition - rect.topLeft());
         drag->setMimeData(dd->model->mimeData(indexes));
         Qt::DropAction action = drag->exec(supportedActions, Qt::CopyAction);
         draggedItems.clear();

@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -45,12 +45,15 @@
 #include <qcheckbox.h>
 #include <qpushbutton.h>
 #include <qprogressbar.h>
+#include <qstatusbar.h>
 #include <qradiobutton.h>
 #include <qtoolbutton.h>
 #include <qlabel.h>
 #include <qgroupbox.h>
 #include <qlcdnumber.h>
+#include <qtextdocument.h>
 #include <qlineedit.h>
+#include <private/qlineedit_p.h>
 #include <qstyle.h>
 #include <qstyleoption.h>
 
@@ -523,6 +526,8 @@ QAccessible::Role QAccessibleDisplay::role(int child) const
     } else if (qobject_cast<QProgressBar*>(object())) {
         return ProgressBar;
 #endif
+    } else if (qobject_cast<QStatusBar*>(object())) {
+        return StatusBar;
     }
     return QAccessibleWidgetEx::role(child);
 }
@@ -536,7 +541,14 @@ QString QAccessibleDisplay::text(Text t, int child) const
         str = widget()->accessibleName();
         if (str.isEmpty()) {
             if (qobject_cast<QLabel*>(object())) {
-                str = qobject_cast<QLabel*>(object())->text();
+                QLabel *label = qobject_cast<QLabel*>(object());
+                str = label->text();
+                if (label->textFormat() == Qt::RichText
+                    || (label->textFormat() == Qt::AutoText && Qt::mightBeRichText(str))) {
+                    QTextDocument doc;
+                    doc.setHtml(str);
+                    str = doc.toPlainText();
+                }
 #ifndef QT_NO_LCDNUMBER
             } else if (qobject_cast<QLCDNumber*>(object())) {
                 QLCDNumber *l = qobject_cast<QLCDNumber*>(object());
@@ -545,6 +557,8 @@ QString QAccessibleDisplay::text(Text t, int child) const
                 else
                     str = QString::number(l->intValue());
 #endif
+            } else if (qobject_cast<QStatusBar*>(object())) {
+                return qobject_cast<QStatusBar*>(object())->currentMessage();
             }
         }
         break;
@@ -750,6 +764,7 @@ QString QAccessibleGroupBox::localizedName(int actionIndex)
 
 QStringList QAccessibleGroupBox::keyBindings(int actionIndex)
 {
+    Q_UNUSED(actionIndex)
     return QStringList();
 }
 
@@ -876,10 +891,22 @@ int QAccessibleLineEdit::cursorPosition()
     return lineEdit()->cursorPosition();
 }
 
-QRect QAccessibleLineEdit::characterRect(int /*offset*/, CoordinateType /*coordType*/)
+QRect QAccessibleLineEdit::characterRect(int offset, CoordinateType coordType)
 {
-    // QLineEdit doesn't hand out character rects
-    return QRect();
+    int left, top, right, bottom;
+    lineEdit()->getTextMargins(&left, &top, &right, &bottom);
+    int x = lineEdit()->d_func()->control->cursorToX(offset);
+    int y = top;
+    QFontMetrics fm(lineEdit()->font());
+    const QString ch = text(offset, offset + 1);
+    int w = fm.width(ch);
+    int h = fm.height();
+
+    QRect r(x, y, w, h);
+    if (coordType == QAccessible2::RelativeToScreen)
+        r.moveTo(lineEdit()->mapToGlobal(r.topLeft()));
+
+    return r;
 }
 
 int QAccessibleLineEdit::selectionCount()

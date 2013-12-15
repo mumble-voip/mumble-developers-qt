@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -513,8 +513,10 @@ void QWidgetPrivate::create_sys(WId window, bool initializeWindow, bool destroyO
     QT_NC_WIDGET_CREATE
 #endif
 
+#ifndef QT_NO_IM
     if (q->hasFocus() && q->testAttribute(Qt::WA_InputMethodEnabled))
         q->inputContext()->setFocusWidget(q);
+#endif
 
     if (destroyw) {
         DestroyWindow(destroyw);
@@ -629,7 +631,15 @@ void QWidgetPrivate::setParent_sys(QWidget *parent, Qt::WindowFlags f)
         dropSiteWasRegistered = true;
         q->setAttribute(Qt::WA_DropSiteRegistered, false); // ole dnd unregister (we will register again below)
     }
-
+    QList<QWidget *> registeredDropChildren;
+    if (QWidget *nativeParent = q->internalWinId() ? q : q->nativeParentWidget()) {
+        foreach (QWidget *w, nativeParent->d_func()->extra->oleDropWidgets) {
+            if (w && q->isAncestorOf(w)) {
+                registeredDropChildren.push_back(w);
+                w->setAttribute(Qt::WA_DropSiteRegistered, false);
+            }
+        }
+    }
     if ((q->windowType() == Qt::Desktop))
         old_winid = 0;
     setWinId(0);
@@ -664,12 +674,26 @@ void QWidgetPrivate::setParent_sys(QWidget *parent, Qt::WindowFlags f)
         setWindowIcon_sys(true);
         setWindowTitle_helper(extra->topextra->caption);
     }
-    if (old_winid)
+    if (old_winid) {
+#ifndef QT_NO_DRAGANDDROP
+        if (extra && extra->dropTarget) {
+            // NOTE: It is possible that the current widget has already registered an ole drop target
+            // without Qt::WA_DropSiteRegistered being set. In this case we have to call RevokeDragDrop()
+            // to drop the reference count of the ole drop target object held by windows to prevent leak
+            // and re-register the old drop target object to the new window handle if possible
+            RevokeDragDrop(old_winid);
+            if (q->internalWinId())
+                RegisterDragDrop(q->internalWinId(), extra->dropTarget);
+        }
+#endif // !QT_NO_DRAGANDDROP
         DestroyWindow(old_winid);
+    }
 
     if (q->testAttribute(Qt::WA_AcceptDrops) || dropSiteWasRegistered
         || (!q->isWindow() && q->parentWidget() && q->parentWidget()->testAttribute(Qt::WA_DropSiteRegistered)))
         q->setAttribute(Qt::WA_DropSiteRegistered, true);
+    foreach (QWidget *w, registeredDropChildren)
+        w->setAttribute(Qt::WA_DropSiteRegistered, true);
 
 #ifdef Q_WS_WINCE
     // Show borderless toplevel windows in tasklist & NavBar
@@ -1471,7 +1495,7 @@ void QWidgetPrivate::setGeometry_sys(int x, int y, int w, int h, bool isMove)
                     data.crect.setRect(x, y, w, h);
                 } else {
                     GetClientRect(q->internalWinId(), &rect);
-                    RECT rcNormalPosition ={0};
+                    RECT rcNormalPosition ={0, 0, 0, 0};
                     // Use (0,0) as window position for embedded ActiveQt controls.
                     if (!tlwExtra || !tlwExtra->embedded)
                         GetWindowRect(q->internalWinId(), &rcNormalPosition);
@@ -1794,28 +1818,42 @@ QOleDropTarget* QWidgetPrivate::registerOleDnd(QWidget *widget)
 
 void QWidgetPrivate::unregisterOleDnd(QWidget *widget, QOleDropTarget *dropTarget)
 {
-    dropTarget->releaseQt();
-    dropTarget->Release();
     Q_ASSERT(widget->testAttribute(Qt::WA_WState_Created));
     if (!widget->internalWinId()) {
+        dropTarget->releaseQt();
+        dropTarget->Release();
         QWidget *nativeParent = widget->nativeParentWidget();
-        Q_ASSERT(nativeParent);
-        QWExtra *nativeExtra = nativeParent->d_func()->extra;
-        Q_ASSERT(nativeExtra);
-        nativeExtra->oleDropWidgets.removeAll(widget);
-        nativeExtra->oleDropWidgets.removeAll(static_cast<QWidget *>(0));
-        if (nativeExtra->oleDropWidgets.isEmpty() && nativeExtra->dropTarget
+        while (nativeParent) {
+            QWExtra *nativeExtra = nativeParent->d_func()->extra;
+            if (!nativeExtra) {
+                nativeParent = nativeParent->nativeParentWidget();
+                continue;
+            }
+
+            const int removeCounter = nativeExtra->oleDropWidgets.removeAll(widget);
+            nativeExtra->oleDropWidgets.removeAll(static_cast<QWidget *>(0));
+            if (nativeExtra->oleDropWidgets.isEmpty() && nativeExtra->dropTarget
                 && !nativeParent->testAttribute(Qt::WA_DropSiteRegistered)) {
 #ifndef Q_OS_WINCE
-            CoLockObjectExternal(nativeExtra->dropTarget, false, true);
+                    CoLockObjectExternal(nativeExtra->dropTarget, false, true);
 #endif
-            RevokeDragDrop(nativeParent->internalWinId());
-            nativeExtra->dropTarget = 0;
+                    nativeExtra->dropTarget->releaseQt();
+                    nativeExtra->dropTarget->Release();
+                    RevokeDragDrop(nativeParent->internalWinId());
+                    nativeExtra->dropTarget = 0;
+            }
+
+            if (removeCounter)
+                break;
+
+            nativeParent = nativeParent->nativeParentWidget();
         }
     } else {
 #ifndef Q_OS_WINCE
         CoLockObjectExternal(dropTarget, false, true);
 #endif
+        dropTarget->releaseQt();
+        dropTarget->Release();
         RevokeDragDrop(widget->internalWinId());
     }
 }
@@ -1884,7 +1922,7 @@ void QWidgetPrivate::setWindowOpacity_sys(qreal level)
 
     if (!isOpaque && ptrUpdateLayeredWindow && (data.window_flags & Qt::FramelessWindowHint)) {
         if (GetWindowLong(q->internalWinId(), GWL_EXSTYLE) & Q_WS_EX_LAYERED) {
-            BLENDFUNCTION blend = {AC_SRC_OVER, 0, (int)(255.0 * level), AC_SRC_ALPHA};
+            BLENDFUNCTION blend = {AC_SRC_OVER, 0, (BYTE)(255.0 * level), AC_SRC_ALPHA};
             ptrUpdateLayeredWindow(q->internalWinId(), NULL, NULL, NULL, NULL, NULL, 0, &blend, Q_ULW_ALPHA);
         }
         return;

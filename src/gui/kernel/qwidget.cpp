@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -129,6 +129,14 @@
 
 #ifdef Q_WS_S60
 #include <aknappui.h>
+#endif
+
+#ifdef Q_OS_BLACKBERRY
+#include <bps/navigator.h>
+#endif
+
+#ifdef Q_OS_BLACKBERRY_TABLET
+#include <bps/orientation.h>
 #endif
 
 // widget/widget data creation count
@@ -416,28 +424,23 @@ void QWidgetPrivate::scrollChildren(int dx, int dy)
     }
 }
 
+#ifndef QT_NO_IM
 QInputContext *QWidgetPrivate::assignedInputContext() const
 {
-#ifndef QT_NO_IM
     const QWidget *widget = q_func();
     while (widget) {
         if (QInputContext *qic = widget->d_func()->ic)
             return qic;
         widget = widget->parentWidget();
     }
-#endif
     return 0;
 }
 
 QInputContext *QWidgetPrivate::inputContext() const
 {
-#ifndef QT_NO_IM
     if (QInputContext *qic = assignedInputContext())
         return qic;
     return qApp->inputContext();
-#else
-    return 0;
-#endif
 }
 
 /*!
@@ -472,7 +475,7 @@ void QWidget::setInputContext(QInputContext *context)
     Q_D(QWidget);
     if (!testAttribute(Qt::WA_InputMethodEnabled))
         return;
-#ifndef QT_NO_IM
+
     if (context == d->ic)
         return;
     if (d->ic)
@@ -480,9 +483,8 @@ void QWidget::setInputContext(QInputContext *context)
     d->ic = context;
     if (d->ic)
         d->ic->setParent(this);
-#endif
 }
-
+#endif // QT_NO_IM
 
 /*!
     \obsolete
@@ -5304,6 +5306,9 @@ QGraphicsEffect *QWidget::graphicsEffect() const
 
     \note This function will apply the effect on itself and all its children.
 
+    \note Graphics effects are not supported on Mac, so they will not cause any difference
+    to the rendering of the widget.
+
     \since 4.6
 
     \sa graphicsEffect()
@@ -5489,7 +5494,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
 
 
     Q_Q(QWidget);
-#ifndef QT_NO_GRAPHICSEFFECT
+#if !defined(QT_NO_GRAPHICSEFFECT) && !defined(Q_WS_MAC)
     if (graphicsEffect && graphicsEffect->isEnabled()) {
         QGraphicsEffectSource *source = graphicsEffect->d_func()->source;
         QWidgetEffectSourcePrivate *sourced = static_cast<QWidgetEffectSourcePrivate *>
@@ -8374,6 +8379,17 @@ bool QWidget::event(QEvent *event)
     case QEvent::MouseButtonDblClick:
         mouseDoubleClickEvent((QMouseEvent*)event);
         break;
+
+     case QEvent::NonClientAreaMouseButtonPress: {
+        QWidget* w;
+        while ((w = QApplication::activePopupWidget()) && w != this) {
+            w->close();
+            if (QApplication::activePopupWidget() == w) // widget does not want to disappear
+                w->hide(); // hide at least
+            }
+        break;
+        }
+
 #ifndef QT_NO_WHEELEVENT
     case QEvent::Wheel:
         wheelEvent((QWheelEvent*)event);
@@ -9415,6 +9431,8 @@ void QWidget::setInputMethodHints(Qt::InputMethodHints hints)
 {
 #ifndef QT_NO_IM
     Q_D(QWidget);
+    if (d->imHints == hints)
+        return;
     d->imHints = hints;
     // Optimization to update input context only it has already been created.
     if (d->ic || qApp->d_func()->inputContext) {
@@ -10543,11 +10561,16 @@ void QWidget::update()
 */
 void QWidget::update(const QRect &rect)
 {
-    if (!isVisible() || !updatesEnabled() || rect.isEmpty())
+    if (!isVisible() || !updatesEnabled())
+        return;
+
+    QRect r = rect & QWidget::rect();
+
+    if (r.isEmpty())
         return;
 
     if (testAttribute(Qt::WA_WState_InPaintEvent)) {
-        QApplication::postEvent(this, new QUpdateLaterEvent(rect));
+        QApplication::postEvent(this, new QUpdateLaterEvent(r));
         return;
     }
 
@@ -10560,9 +10583,9 @@ void QWidget::update(const QRect &rect)
 #endif // QT_MAC_USE_COCOA
         QTLWExtra *tlwExtra = window()->d_func()->maybeTopData();
         if (tlwExtra && !tlwExtra->inTopLevelResize && tlwExtra->backingStore)
-            tlwExtra->backingStore->markDirty(rect, this);
+            tlwExtra->backingStore->markDirty(r, this);
     } else {
-        d_func()->repaint_sys(rect);
+        d_func()->repaint_sys(r);
     }
 }
 
@@ -10576,8 +10599,13 @@ void QWidget::update(const QRegion &rgn)
     if (!isVisible() || !updatesEnabled() || rgn.isEmpty())
         return;
 
+    QRegion r = rgn & QWidget::rect();
+
+    if (r.isEmpty())
+        return;
+
     if (testAttribute(Qt::WA_WState_InPaintEvent)) {
-        QApplication::postEvent(this, new QUpdateLaterEvent(rgn));
+        QApplication::postEvent(this, new QUpdateLaterEvent(r));
         return;
     }
 
@@ -10590,9 +10618,9 @@ void QWidget::update(const QRegion &rgn)
 #endif // QT_MAC_USE_COCOA
         QTLWExtra *tlwExtra = window()->d_func()->maybeTopData();
         if (tlwExtra && !tlwExtra->inTopLevelResize && tlwExtra->backingStore)
-            tlwExtra->backingStore->markDirty(rgn, this);
+            tlwExtra->backingStore->markDirty(r, this);
     } else {
-        d_func()->repaint_sys(rgn);
+        d_func()->repaint_sys(r);
     }
 }
 
@@ -11000,6 +11028,40 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
                     setAttribute_internal(orientations[i], false, data, d);
             }
         }
+
+#ifdef Q_OS_BLACKBERRY
+        if (testAttribute(Qt::WA_AutoOrientation)) {
+            navigator_rotation_lock(false);
+        } else {
+#ifdef Q_OS_BLACKBERRY_TABLET
+            const bool portraitLocked = testAttribute(Qt::WA_LockPortraitOrientation);
+
+            orientation_direction_t direction;
+            orientation_get(&direction, 0);
+
+            int rotation = 0;
+
+            switch (direction) {
+            case ORIENTATION_TOP_UP:
+            case ORIENTATION_RIGHT_UP:
+                rotation = portraitLocked ? 90 : 0;
+                break;
+            case ORIENTATION_BOTTOM_UP:
+            case ORIENTATION_LEFT_UP:
+                rotation = portraitLocked ? 270 : 180;
+                break;
+            default:
+                break;
+            }
+
+            navigator_set_orientation(rotation, 0);
+#else
+            navigator_set_orientation_mode((testAttribute(Qt::WA_LockPortraitOrientation) ?
+                                            NAVIGATOR_PORTRAIT : NAVIGATOR_LANDSCAPE), 0);
+#endif // Q_OS_BLACKBERRY_TABLET
+            navigator_rotation_lock(true);
+        }
+#endif // Q_OS_BLACKBERRY
 
 #ifdef Q_WS_S60
         CAknAppUiBase* appUi = static_cast<CAknAppUiBase*>(CEikonEnv::Static()->EikAppUi());

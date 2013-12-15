@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -116,8 +116,9 @@ private slots:
     void maxLength();
     void masks();
     void validators();
+#ifndef QT_NO_IM
     void inputMethods();
-
+#endif
     void passwordCharacter();
     void cursorDelegate();
     void cursorVisible();
@@ -129,8 +130,10 @@ private slots:
     void canPaste();
     void readOnly();
 
+#ifndef QT_NO_IM
     void openInputPanelOnClick();
     void openInputPanelOnFocus();
+#endif
     void setHAlignClearCache();
     void focusOutClearSelection();
 
@@ -142,10 +145,12 @@ private slots:
     void testQtQuick11Attributes();
     void testQtQuick11Attributes_data();
 
+#ifndef QT_NO_IM
     void preeditAutoScroll();
     void preeditMicroFocus();
     void inputContextMouseHandler();
     void inputMethodComposing();
+#endif
     void cursorRectangleSize();
     void deselect();
 
@@ -1521,6 +1526,7 @@ void tst_qdeclarativetextinput::validators()
     delete canvas;
 }
 
+#ifndef QT_NO_IM
 void tst_qdeclarativetextinput::inputMethods()
 {
     QDeclarativeView *canvas = createView(SRCDIR "/data/inputmethods.qml");
@@ -1569,6 +1575,7 @@ void tst_qdeclarativetextinput::inputMethods()
 
     delete canvas;
 }
+#endif // QT_NO_IM
 
 /*
 TextInput element should only handle left/right keys until the cursor reaches
@@ -2155,6 +2162,8 @@ QDeclarativeView *tst_qdeclarativetextinput::createView(const QString &filename)
 
     return canvas;
 }
+
+#ifndef QT_NO_IM
 class MyInputContext : public QInputContext
 {
 public:
@@ -2389,6 +2398,7 @@ void tst_qdeclarativetextinput::openInputPanelOnFocus()
     QVERIFY(view.inputContext() == 0);
     QVERIFY(!view.testAttribute(Qt::WA_InputMethodEnabled));
 }
+#endif // QT_NO_IM
 
 class MyTextInput : public QDeclarativeTextInput
 {
@@ -2497,6 +2507,7 @@ void tst_qdeclarativetextinput::testQtQuick11Attributes_data()
         << "";
 }
 
+#ifndef QT_NO_IM
 void tst_qdeclarativetextinput::preeditAutoScroll()
 {
     QString committedText = "super";
@@ -2525,13 +2536,15 @@ void tst_qdeclarativetextinput::preeditAutoScroll()
     ic.sendPreeditText(preeditText.mid(0, 3), 1);
     QVERIFY(input.positionAt(0) != 0);
     QVERIFY(input.cursorRectangle().left() < input.boundingRect().width());
-    QCOMPARE(cursorRectangleSpy.count(), ++cursorRectangleChanges);
+    QVERIFY(cursorRectangleSpy.count() > cursorRectangleChanges);
+    cursorRectangleChanges = cursorRectangleSpy.count();
 
     // test the text is scrolled back when the preedit is removed.
     ic.sendEvent(QInputMethodEvent());
     QCOMPARE(input.positionAt(0), 0);
     QCOMPARE(input.positionAt(input.width()), 5);
-    QCOMPARE(cursorRectangleSpy.count(), ++cursorRectangleChanges);
+    QVERIFY(cursorRectangleSpy.count() > cursorRectangleChanges);
+    cursorRectangleChanges = cursorRectangleSpy.count();
 
     // some tolerance for different fonts.
 #ifdef Q_OS_LINUX
@@ -2547,14 +2560,16 @@ void tst_qdeclarativetextinput::preeditAutoScroll()
         ic.sendPreeditText(preeditText, i + 1);
         QVERIFY(input.cursorRectangle().right() >= fm.width(preeditText.at(i)) - error);
         QVERIFY(input.positionToRectangle(0).x() < x);
-        QCOMPARE(cursorRectangleSpy.count(), ++cursorRectangleChanges);
+        QVERIFY(cursorRectangleSpy.count() > cursorRectangleChanges);
+        cursorRectangleChanges = cursorRectangleSpy.count();
         x = input.positionToRectangle(0).x();
     }
     for (int i = 1; i >= 0; --i) {
         ic.sendPreeditText(preeditText, i + 1);
         QVERIFY(input.cursorRectangle().right() >= fm.width(preeditText.at(i)) - error);
         QVERIFY(input.positionToRectangle(0).x() > x);
-        QCOMPARE(cursorRectangleSpy.count(), ++cursorRectangleChanges);
+        QVERIFY(cursorRectangleSpy.count() > cursorRectangleChanges);
+        cursorRectangleChanges = cursorRectangleSpy.count();
         x = input.positionToRectangle(0).x();
     }
 
@@ -2566,12 +2581,14 @@ void tst_qdeclarativetextinput::preeditAutoScroll()
     for (int i = 2; i >= 0; --i) {
         ic.sendPreeditText(preeditText, preeditText.length() - i);
         QCOMPARE(input.positionToRectangle(0).x(), x);
-        QCOMPARE(cursorRectangleSpy.count(), ++cursorRectangleChanges);
+        QVERIFY(cursorRectangleSpy.count() > cursorRectangleChanges);
+        cursorRectangleChanges = cursorRectangleSpy.count();
     }
     for (int i = 1; i <  3; ++i) {
         ic.sendPreeditText(preeditText, preeditText.length() - i);
         QCOMPARE(input.positionToRectangle(0).x(), x);
-        QCOMPARE(cursorRectangleSpy.count(), ++cursorRectangleChanges);
+        QVERIFY(cursorRectangleSpy.count() > cursorRectangleChanges);
+        cursorRectangleChanges = cursorRectangleSpy.count();
     }
 
     // Test disabling auto scroll.
@@ -2807,6 +2824,7 @@ void tst_qdeclarativetextinput::inputMethodComposing()
     QCOMPARE(input.isInputMethodComposing(), false);
     QCOMPARE(spy.count(), 2);
 }
+#endif // QT_NO_IM
 
 void tst_qdeclarativetextinput::cursorRectangleSize()
 {

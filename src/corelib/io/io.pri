@@ -88,8 +88,12 @@ win32 {
         }
         !nacl:macx-*: {
             HEADERS += io/qfilesystemwatcher_fsevents_p.h
-            SOURCES += io/qfilesystemengine_mac.cpp
             SOURCES += io/qsettings_mac.cpp io/qfilesystemwatcher_fsevents.cpp
+        }
+
+        qnx:contains(QT_CONFIG, inotify) {
+            SOURCES += io/qfilesystemwatcher_inotify.cpp
+            HEADERS += io/qfilesystemwatcher_inotify_p.h
         }
 
         linux-*:!symbian {

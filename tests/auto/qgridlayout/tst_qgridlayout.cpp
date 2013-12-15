@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -50,6 +50,7 @@
 
 #include <QtGui/QWindowsStyle>
 #include <QStyleFactory>
+#include <QSharedPointer>
 
 #include "../../shared/util.h"
 #include "../platformquirks.h"
@@ -57,6 +58,16 @@
 //TESTED_CLASS=
 //TESTED_FILES=gui/kernel/qlayout.cpp gui/kernel/qlayout.h
 
+
+// Make a widget frameless to prevent size constraints of title bars
+// from interfering (Windows).
+static inline void setFrameless(QWidget *w)
+{
+    Qt::WindowFlags flags = w->windowFlags();
+    flags |= Qt::FramelessWindowHint;
+    flags &= ~(Qt::WindowTitleHint | Qt::WindowSystemMenuHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+    w->setWindowFlags(flags);
+}
 
 class tst_QGridLayout : public QObject
 {
@@ -93,6 +104,8 @@ private slots:
     void spacerWithSpacing();
     void contentsRect();
     void distributeMultiCell();
+
+    void taskQTBUG_27420_takeAtShouldUnparentLayout();
 
 private:
     QWidget *testWidget;
@@ -258,6 +271,7 @@ void tst_QGridLayout::badDistributionBug()
 void tst_QGridLayout::setMinAndMaxSize()
 {
     QWidget widget;
+    setFrameless(&widget);
     QGridLayout layout(&widget);
     layout.setMargin(0);
     layout.setSpacing(0);
@@ -414,6 +428,7 @@ private:
 void tst_QGridLayout::spacingAndSpacers()
 {
     QWidget widget;
+    setFrameless(&widget);
     QGridLayout layout(&widget);
     layout.setMargin(0);
     layout.setSpacing(0);
@@ -679,8 +694,11 @@ void tst_QGridLayout::spacingsAndMargins()
 
     QApplication::setStyle(new Qt42Style);
     QWidget toplevel;
-    if(PlatformQuirks::isAutoMaximizing())
+    if (PlatformQuirks::isAutoMaximizing()) {
         toplevel.setWindowFlags(Qt::X11BypassWindowManagerHint);
+    } else {
+        setFrameless(&toplevel);
+    }
     QVBoxLayout vbox(&toplevel);
     QGridLayout grid1;
     vbox.addLayout(&grid1);
@@ -875,8 +893,10 @@ void tst_QGridLayout::minMaxSize()
     QApplication::setStyle(style);
     if (!m_grid)
         m_grid = new QGridLayout();
-    if (!m_toplevel)
+    if (!m_toplevel) {
         m_toplevel = new QWidget();
+        setFrameless(m_toplevel);
+    }
     if (fixedSize.isValid()) {
         m_toplevel->setFixedSize(fixedSize);
     } else {
@@ -1087,6 +1107,7 @@ void tst_QGridLayout::styleDependentSpacingsAndMargins()
 
     QApplication::setStyle(new CustomLayoutStyle());
     QWidget widget;
+    setFrameless(&widget);
     QGridLayout layout(&widget);
     QList<QPointer<SizeHinterFrame> > sizehinters;
     for (int i = 0; i < rows; ++i) {
@@ -1127,6 +1148,7 @@ void tst_QGridLayout::layoutSpacingImplementation_data()
         style->reimplementSubelementRect = false;
         QApplication::setStyle(style);
         QWidget *w = new QWidget();
+        setFrameless(w);
         QVBoxLayout *layout = new QVBoxLayout();
         QRadioButton *rb1 = new QRadioButton(QLatin1String("Radio 1"), w);
         QRadioButton *rb2 = new QRadioButton(QLatin1String("Radio 2"), w);
@@ -1163,6 +1185,7 @@ void tst_QGridLayout::layoutSpacingImplementation_data()
         style->reimplementSubelementRect = false;
         QApplication::setStyle(style);
         QWidget *w = new QWidget();
+        setFrameless(w);
         QHBoxLayout *layout = new QHBoxLayout();
         QLineEdit *le1 = new QLineEdit(w);
         QLineEdit *le2 = new QLineEdit(w);
@@ -1200,6 +1223,7 @@ void tst_QGridLayout::layoutSpacingImplementation_data()
         style->reimplementSubelementRect = true;
         QApplication::setStyle(style);
         QWidget *w = new QWidget();
+        setFrameless(w);
         QVBoxLayout *layout = new QVBoxLayout();
         QPushButton *pb1 = new QPushButton(QLatin1String("Push 1"), w);
 
@@ -1236,6 +1260,7 @@ void tst_QGridLayout::layoutSpacingImplementation_data()
         style->reimplementSubelementRect = true;
         QApplication::setStyle(style);
         QWidget *w = new QWidget();
+        setFrameless(w);
         QGridLayout *layout = new QGridLayout();
         QPushButton *pb1 = new QPushButton(QLatin1String("Push 1"), w);
         QPushButton *pb2 = new QPushButton(QLatin1String("Push 2"), w);
@@ -1303,6 +1328,7 @@ void tst_QGridLayout::layoutSpacingImplementation_data()
         style->reimplementSubelementRect = true;
         QApplication::setStyle(style);
         QWidget *w = new QWidget();
+        setFrameless(w);
         QVBoxLayout *layout = new QVBoxLayout();
         QPushButton *pb1 = new QPushButton(QLatin1String("Push 1"), w);
 
@@ -1342,6 +1368,7 @@ void tst_QGridLayout::layoutSpacingImplementation_data()
         style->reimplementSubelementRect = true;
         QApplication::setStyle(style);
         QWidget *w = new QWidget();
+        setFrameless(w);
         QVBoxLayout *layout = new QVBoxLayout();
         QPushButton *pb1 = new QPushButton(QLatin1String("Push 1"), w);
 
@@ -1390,6 +1417,7 @@ void tst_QGridLayout::layoutSpacingImplementation_data()
         style->reimplementSubelementRect = false;
         QApplication::setStyle(style);
         QWidget *w = new QWidget();
+        setFrameless(w);
         QGridLayout *layout = new QGridLayout();
         QPushButton *left = new QPushButton(w);
         QPushButton *up = new QPushButton(w);
@@ -1431,6 +1459,7 @@ void tst_QGridLayout::layoutSpacingImplementation_data()
             style->reimplementSubelementRect = false;
             QApplication::setStyle(style);
             QWidget *w = new QWidget();
+            setFrameless(w);
             QGridLayout *layout = new QGridLayout();
             QPushButton *left = new QPushButton(w);
             QPushButton *up = new QPushButton(w);
@@ -1468,6 +1497,7 @@ void tst_QGridLayout::layoutSpacingImplementation()
     QFETCH(bool, customSubElementRect);
 
     QWidget toplevel;
+    setFrameless(&toplevel);
 
     CustomLayoutStyle *style = new CustomLayoutStyle();
     style->hspacing = hSpacing;
@@ -1494,6 +1524,7 @@ void tst_QGridLayout::layoutSpacingImplementation()
 void tst_QGridLayout::spacing()
 {
     QWidget w;
+    setFrameless(&w);
     CustomLayoutStyle *style = new CustomLayoutStyle();
     style->hspacing = 5;
     style->vspacing = 10;
@@ -1601,6 +1632,7 @@ void tst_QGridLayout::spacerWithSpacing()
 void tst_QGridLayout::contentsRect()
 {
     QWidget w;
+    setFrameless(&w);
     QGridLayout grid;
     w.setLayout(&grid);
     grid.addWidget(new QPushButton(&w));
@@ -1640,6 +1672,27 @@ void tst_QGridLayout::distributeMultiCell()
 
     QCOMPARE(box.sizeHint().height(), 57);
     QCOMPARE(w.sizeHint().height(), 11 + 57 + 11);
+}
+
+void tst_QGridLayout::taskQTBUG_27420_takeAtShouldUnparentLayout()
+{
+    QSharedPointer<QGridLayout> outer(new QGridLayout);
+    QPointer<QGridLayout> inner = new QGridLayout;
+
+    outer->addLayout(inner, 0, 0);
+    QCOMPARE(outer->count(), 1);
+    QCOMPARE(inner->parent(), outer.data());
+
+    QLayoutItem *item = outer->takeAt(0);
+    QCOMPARE(item->layout(), inner.data());
+    QVERIFY(!item->layout()->parent());
+
+    outer.clear();
+
+    if (inner)
+        delete item; // success: a taken item/layout should not be deleted when the old parent is deleted
+    else
+        QVERIFY(!inner.isNull());
 }
 
 QTEST_MAIN(tst_QGridLayout)

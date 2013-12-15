@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -764,7 +764,7 @@ static QSize qt_aqua_get_known_size(QStyle::ContentsType ct, const QWidget *widg
         if (!widg || !qobject_cast<QComboBox *>(widg->parentWidget())) {
             //should I take into account the font dimentions of the lineedit? -Sam
             if (sz == QAquaSizeLarge)
-                ret = QSize(-1, 22);
+                ret = QSize(-1, 21);
             else
                 ret = QSize(-1, 19);
         }
@@ -1146,7 +1146,7 @@ HIRect QMacStylePrivate::comboboxInnerBounds(const HIRect &outerBounds, int butt
     switch (buttonKind){
     case kThemePopupButton:
         innerBounds.origin.x += 2;
-        innerBounds.origin.y += 3;
+        innerBounds.origin.y += 2;
         innerBounds.size.width -= 5;
         innerBounds.size.height -= 6;
         break;
@@ -1164,9 +1164,9 @@ HIRect QMacStylePrivate::comboboxInnerBounds(const HIRect &outerBounds, int butt
         break;
     case kThemeComboBox:
         innerBounds.origin.x += 3;
-        innerBounds.origin.y += 3;
+        innerBounds.origin.y += 2;
         innerBounds.size.width -= 6;
-        innerBounds.size.height -= 6;
+        innerBounds.size.height -= 8;
         break;
     case kThemeComboBoxSmall:
         innerBounds.origin.x += 3;
@@ -1195,7 +1195,7 @@ QRect QMacStylePrivate::comboboxEditBounds(const QRect &outerBounds, const HIThe
     QRect ret = outerBounds;
     switch (bdi.kind){
     case kThemeComboBox:
-        ret.adjust(5, 8, -22, -4);
+        ret.adjust(5, 5, -22, -5);
         break;
     case kThemeComboBoxSmall:
         ret.adjust(4, 6, -20, 0);
@@ -1206,7 +1206,7 @@ QRect QMacStylePrivate::comboboxEditBounds(const QRect &outerBounds, const HIThe
         ret.setHeight(12);
         break;
     case kThemePopupButton:
-        ret.adjust(10, 3, -23, -3);
+        ret.adjust(10, 2, -23, -4);
         break;
     case kThemePopupButtonSmall:
         ret.adjust(9, 3, -20, -3);
@@ -3656,13 +3656,18 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
             QStyleOptionTabV3 myTab = *tab;
             ThemeTabDirection ttd = getTabDirection(myTab.shape);
             bool verticalTabs = ttd == kThemeTabWest || ttd == kThemeTabEast;
+            bool selected = (myTab.state & QStyle::State_Selected);
+            bool usingModernOSX = QSysInfo::MacintoshVersion > QSysInfo::MV_10_6;
+
+            if (usingModernOSX && selected && !myTab.documentMode)
+                myTab.palette.setColor(QPalette::WindowText, QColor(Qt::white));
 
             // Check to see if we use have the same as the system font
             // (QComboMenuItem is internal and should never be seen by the
             // outside world, unless they read the source, in which case, it's
             // their own fault).
             bool nonDefaultFont = p->font() != qt_app_fonts_hash()->value("QComboMenuItem");
-            if (verticalTabs || nonDefaultFont || !tab->icon.isNull()
+            if ((usingModernOSX && selected) || verticalTabs || nonDefaultFont || !tab->icon.isNull()
                 || !myTab.leftButtonSize.isNull() || !myTab.rightButtonSize.isNull()) {
                 int heightOffset = 0;
                 if (verticalTabs) {
@@ -3673,39 +3678,24 @@ void QMacStyle::drawControl(ControlElement ce, const QStyleOption *opt, QPainter
                 }
                 myTab.rect.setHeight(myTab.rect.height() + heightOffset);
 
-                if (myTab.documentMode) {
+                if (myTab.documentMode || (usingModernOSX && selected)) {
                     p->save();
                     rotateTabPainter(p, myTab.shape, myTab.rect);
 
+                    QColor shadowColor = QColor(myTab.documentMode ? Qt::white : Qt::black);
+                    shadowColor.setAlpha(75);
                     QPalette np = tab->palette;
-                    np.setColor(QPalette::WindowText, QColor(255, 255, 255, 75));
+                    np.setColor(QPalette::WindowText, shadowColor);
+
                     QRect nr = subElementRect(SE_TabBarTabText, opt, w);
                     nr.moveTop(-1);
                     int alignment = Qt::AlignCenter | Qt::TextShowMnemonic | Qt::TextHideMnemonic;
                     proxy()->drawItemText(p, nr, alignment, np, tab->state & State_Enabled,
                                                tab->text, QPalette::WindowText);
                     p->restore();
-                    QCommonStyle::drawControl(ce, &myTab, p, w);
-                } else if (qMacVersion() >= QSysInfo::MV_10_7 && (tab->state & State_Selected)) {
-                    p->save();
-                    rotateTabPainter(p, myTab.shape, myTab.rect);
-
-                    QPalette np = tab->palette;
-                    np.setColor(QPalette::WindowText, QColor(0, 0, 0, 75));
-                    QRect nr = subElementRect(SE_TabBarTabText, opt, w);
-                    nr.moveTop(-1);
-                    int alignment = Qt::AlignCenter | Qt::TextShowMnemonic | Qt::TextHideMnemonic;
-                    proxy()->drawItemText(p, nr, alignment, np, tab->state & State_Enabled,
-                                               tab->text, QPalette::WindowText);
-
-                    np.setColor(QPalette::WindowText, QColor(255, 255, 255, 255));
-                    nr.moveTop(-2);
-                    proxy()->drawItemText(p, nr, alignment, np, tab->state & State_Enabled,
-                                               tab->text, QPalette::WindowText);
-                    p->restore();
-                } else {
-                    QCommonStyle::drawControl(ce, &myTab, p, w);
                 }
+
+                QCommonStyle::drawControl(ce, &myTab, p, w);
             } else {
                 p->save();
                 CGContextSetShouldAntialias(cg, true);
@@ -4403,7 +4393,7 @@ QRect QMacStyle::subElementRect(SubElement sr, const QStyleOption *opt,
         if(widget->parentWidget() && qobject_cast<const QComboBox*>(widget->parentWidget()))
             rect.adjust(-1, -2, 0, 0);
         else
-            rect.adjust(-1, 0, 0, +1);
+            rect.adjust(-1, -1, 0, +1);
         break;
     case SE_CheckBoxLayoutItem:
         rect = opt->rect;

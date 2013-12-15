@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -216,6 +216,7 @@ private Q_SLOTS:
     void postToHttpSynchronous();
     void postToHttpMultipart_data();
     void postToHttpMultipart();
+    void multipartSkipIndices(); // QTBUG-32534
     void deleteFromHttp_data();
     void deleteFromHttp();
     void putGetDeleteGetFromHttp_data();
@@ -370,6 +371,9 @@ private Q_SLOTS:
 
     void qtbug18232gzipContentLengthZero();
     void nb279420gzipNoContentLengthEmptyContentDisconnect();
+
+    void qtbug27161httpHeaderMayBeDamaged_data();
+    void qtbug27161httpHeaderMayBeDamaged();
 
     void synchronousRequest_data();
     void synchronousRequest();
@@ -2274,6 +2278,49 @@ void tst_QNetworkReply::postToHttpMultipart()
     expectedReplyData.prepend("content type: multipart/" + contentType + "; boundary=\"" + multiPart->boundary() + "\"\n");
 //    QEXPECT_FAIL("nested", "the server does not understand nested multipart messages", Continue); // see above
     QCOMPARE(replyData, expectedReplyData);
+}
+
+void tst_QNetworkReply::multipartSkipIndices() // QTBUG-32534
+{
+    QHttpMultiPart *multiPart = new QHttpMultiPart(QHttpMultiPart::MixedType);
+    QUrl url("http://" + QtNetworkSettings::serverName() + "/qtest/cgi-bin/multipart.cgi");
+    QNetworkRequest request(url);
+    QList<QByteArray> parts;
+    parts << QByteArray(56083, 'X') << QByteArray(468, 'X') << QByteArray(24952, 'X');
+
+    QHttpPart part1;
+    part1.setHeader(QNetworkRequest::ContentDispositionHeader, "form-data; name=\"field1\"; filename=\"aaaa.bin\"");
+    part1.setHeader(QNetworkRequest::ContentTypeHeader, "application/octet-stream");
+    part1.setBody(parts.at(0));
+    multiPart->append(part1);
+
+    QHttpPart part2;
+    part2.setHeader(QNetworkRequest::ContentDispositionHeader, "form-data; name=\"field2\"; filename=\"bbbb.txt\"");
+    part2.setHeader(QNetworkRequest::ContentTypeHeader, "text/plain");
+    part2.setBody(parts.at(1));
+    multiPart->append(part2);
+
+    QHttpPart part3;
+    part3.setHeader(QNetworkRequest::ContentDispositionHeader, "form-data; name=\"text-3\"; filename=\"cccc.txt\"");
+    part3.setHeader(QNetworkRequest::ContentTypeHeader, "text/plain");
+    part3.setBody(parts.at(2));
+    multiPart->append(part3);
+
+    QNetworkReplyPtr reply;
+    RUN_REQUEST(runMultipartRequest(request, reply, multiPart, "POST"));
+
+    QCOMPARE(reply->error(), QNetworkReply::NoError);
+
+    QCOMPARE(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt(), 200); // 200 Ok
+    QByteArray line;
+    int partIndex = 0;
+    while ((line = reply->readLine()) != QByteArray("")) {
+        if (line.startsWith("content:")) {
+            // before, the 3rd part would return garbled output at the end
+            QCOMPARE("content: " + parts[partIndex++] + "\n", line);
+        }
+    }
+    multiPart->deleteLater();
 }
 
 void tst_QNetworkReply::putToHttpMultipart_data()
@@ -6426,6 +6473,79 @@ void tst_QNetworkReply::nb279420gzipNoContentLengthEmptyContentDisconnect()
     QCOMPARE(reply->size(), qint64(0));
     QVERIFY(!reply->header(QNetworkRequest::ContentLengthHeader).isValid());
     QCOMPARE(reply->readAll(), QByteArray());
+}
+
+class QtBug27161Helper : public QObject {
+    Q_OBJECT
+public:
+    QtBug27161Helper(MiniHttpServer & server, const QByteArray & data):
+        m_server(server),
+        m_data(data)
+    {
+        connect(&m_server, SIGNAL(newConnection()), this, SLOT(newConnectionSlot()));
+    }
+public slots:
+    void newConnectionSlot(){
+        connect(m_server.client, SIGNAL(bytesWritten(qint64)), this, SLOT(bytesWrittenSlot()));
+    }
+
+    void bytesWrittenSlot(){
+        disconnect(m_server.client, SIGNAL(bytesWritten(qint64)), this, SLOT(bytesWrittenSlot()));
+        m_Timer.singleShot(100, this, SLOT(timeoutSlot()));
+    }
+
+    void timeoutSlot(){
+        m_server.doClose = true;
+        // we need to emulate the bytesWrittenSlot call if the data is empty.
+        if (m_data.size() == 0)
+            QMetaObject::invokeMethod(&m_server, "bytesWrittenSlot", Qt::QueuedConnection);
+        else
+            m_server.client->write(m_data);
+    }
+
+private:
+    MiniHttpServer & m_server;
+    QByteArray m_data;
+    QTimer m_Timer;
+};
+
+void tst_QNetworkReply::qtbug27161httpHeaderMayBeDamaged_data(){
+    QByteArray response("HTTP/1.0 200 OK\r\nServer: bogus\r\nContent-Length: 3\r\n\r\nABC");
+    QTest::addColumn<QByteArray>("firstPacket");
+    QTest::addColumn<QByteArray>("secondPacket");
+
+    for (int i = 1; i < response.size(); i++){
+        QByteArray dataTag("Iteration: ");
+        dataTag.append(QByteArray::number(i - 1));
+        QTest::newRow(dataTag.constData()) << response.left(i) << response.mid(i);
+    }
+}
+
+/*
+ * Purpose of this test is to check whether a content from server is parsed correctly
+ * if it is splitted into two parts.
+ */
+void tst_QNetworkReply::qtbug27161httpHeaderMayBeDamaged(){
+    QFETCH(QByteArray, firstPacket);
+    QFETCH(QByteArray, secondPacket);
+    MiniHttpServer server(firstPacket);
+    server.doClose = false;
+    QtBug27161Helper helper(server, secondPacket);
+
+    QNetworkRequest request(QUrl("http://localhost:" + QString::number(server.serverPort())));
+    QNetworkReplyPtr reply(manager.get(request));
+
+    connect(reply, SIGNAL(finished()), &QTestEventLoop::instance(), SLOT(exitLoop()));
+    QTestEventLoop::instance().enterLoop(10);
+    QVERIFY(!QTestEventLoop::instance().timeout());
+
+    QVERIFY(reply->isFinished());
+    QCOMPARE(reply->error(), QNetworkReply::NoError);
+    QCOMPARE(reply->size(), qint64(3));
+    QCOMPARE(reply->header(QNetworkRequest::ContentLengthHeader).toLongLong(), qint64(3));
+    QCOMPARE(reply->rawHeader("Content-length"), QByteArray("3"));
+    QCOMPARE(reply->rawHeader("Server"), QByteArray("bogus"));
+    QCOMPARE(reply->readAll(), QByteArray("ABC"));
 }
 
 void tst_QNetworkReply::synchronousRequest_data()

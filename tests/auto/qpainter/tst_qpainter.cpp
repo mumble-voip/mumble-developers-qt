@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -111,6 +111,7 @@ private slots:
 
     void drawBorderPixmap();
     void drawPixmapFragments();
+    void drawPixmapNegativeScale();
 
     void drawLine_data();
     void drawLine();
@@ -222,6 +223,7 @@ private slots:
     void drawImage_task217400();
     void drawImage_1x1();
     void drawImage_task258776();
+    void drawImage_QTBUG28324();
     void drawRect_task215378();
     void drawRect_task247505();
 
@@ -268,6 +270,12 @@ private slots:
     void QTBUG17053_zeroDashPattern();
 
     void drawTextOutsideGuiThread();
+
+    void QTBUG26013_squareCapStroke();
+    void QTBUG25153_drawLine();
+
+    void cosmeticStrokerClipping_data();
+    void cosmeticStrokerClipping();
 
 private:
     void fillData();
@@ -1053,6 +1061,40 @@ void tst_QPainter::drawPixmapFragments()
     QVERIFY(fragment.scaleY == 1);
     QVERIFY(fragment.rotation == 0);
     QVERIFY(fragment.opacity == 1);
+}
+
+void tst_QPainter::drawPixmapNegativeScale()
+{
+    // basePixmap is a 16x16 opaque white square ...
+    QPixmap basePixmap(16, 16);
+    basePixmap.fill(QColor(255, 255, 255, 255));
+    // ... with an opaque black 8x16 left strip
+    QPainter p(&basePixmap);
+    p.setCompositionMode(QPainter::CompositionMode_Source);
+    p.fillRect(QRect(0, 0, 8, 16), QColor(0, 0, 0, 255));
+    p.end();
+
+    // verify one pixel value for each strip
+    QImage baseImage = basePixmap.toImage().convertToFormat(QImage::Format_ARGB32);
+    QVERIFY(baseImage.pixel(4, 8) == qRgba(0, 0, 0, 255));
+    QVERIFY(baseImage.pixel(12, 8) == qRgba(255, 255, 255, 255));
+
+    // resultPixmap is a 16x16 square
+    QPixmap resultPixmap(16, 16);
+
+    // draw basePixmap over resultPixmap using x=-1.0 y=-1.0
+    // scaling factors (i.e. 180° rotation)
+    QPainter p2(&resultPixmap);
+    p2.setCompositionMode(QPainter::CompositionMode_Source);
+    p2.scale(qreal(-1.0), qreal(-1.0));
+    p2.translate(-resultPixmap.width(), -resultPixmap.height());
+    p2.drawPixmap(resultPixmap.rect(), basePixmap);
+    p2.end();
+
+    // check result
+    QImage resultImage = resultPixmap.toImage().convertToFormat(QImage::Format_ARGB32);
+    QVERIFY(resultImage.pixel(4, 8) == qRgba(255, 255, 255, 255)); // left strip is now white
+    QVERIFY(resultImage.pixel(12, 8) == qRgba(0, 0, 0, 255)); // and right strip is now black
 }
 
 void tst_QPainter::drawLine_data()
@@ -3631,6 +3673,25 @@ void tst_QPainter::drawImage_task258776()
     QCOMPARE(dest, expected);
 }
 
+void tst_QPainter::drawImage_QTBUG28324()
+{
+    QImage dest(512, 512, QImage::Format_ARGB32_Premultiplied);
+    dest.fill(0x0);
+
+    int x = 263; int y = 89; int w = 61; int h = 39;
+
+    QImage source(w, h, QImage::Format_ARGB32_Premultiplied);
+    quint32 *b = (quint32 *)source.bits();
+    for (int j = 0; j < w * h; ++j)
+        b[j] = 0x7f7f7f7f;
+
+    // nothing to test here since the bug is about
+    // an invalid memory read, which valgrind
+    // would complain about
+    QPainter p(&dest);
+    p.drawImage(x, y, source);
+}
+
 void tst_QPainter::clipRectSaveRestore()
 {
     QImage img(64, 64, QImage::Format_ARGB32_Premultiplied);
@@ -4779,6 +4840,126 @@ void tst_QPainter::drawTextOutsideGuiThread()
 
     QCOMPARE(referenceRendering, t.rendering);
 }
+
+void tst_QPainter::QTBUG26013_squareCapStroke()
+{
+    QImage image(4, 4, QImage::Format_RGB32);
+
+    QPainter p(&image);
+    p.setPen(QPen(Qt::black, 0, Qt::SolidLine, Qt::SquareCap));
+
+    for (int i = 0; i < 3; ++i) {
+        qreal d = i / 3.0;
+
+        image.fill(0xffffffff);
+
+        p.drawLine(QLineF(0, d, 0, d + 2));
+        p.drawLine(QLineF(1, d, 3, d));
+
+        // ensure that a horizontal line and a vertical line with square cap round up (downwards) at the same time
+        QCOMPARE(image.pixel(0, 0), image.pixel(1, 0));
+
+        image.fill(0xffffffff);
+
+        p.drawLine(QLineF(d, 0, d + 2, 0));
+        p.drawLine(QLineF(d, 1, d, 3));
+
+        // ensure that a vertical line and a horizontal line with square cap round up (to the right) at the same time
+        QCOMPARE(image.pixel(0, 0), image.pixel(0, 1));
+    }
+}
+
+void tst_QPainter::QTBUG25153_drawLine()
+{
+    QImage image(2, 2, QImage::Format_RGB32);
+
+    QVector<Qt::PenCapStyle> styles;
+    styles << Qt::FlatCap << Qt::SquareCap << Qt::RoundCap;
+
+    foreach (Qt::PenCapStyle style, styles) {
+        image.fill(0xffffffff);
+        QPainter p(&image);
+        p.setPen(QPen(Qt::black, 0, Qt::SolidLine, style));
+        p.drawLine(QLineF(0, 0, 0, 0));
+        p.end();
+
+        QCOMPARE(image.pixel(0, 0), 0xff000000);
+        QCOMPARE(image.pixel(0, 1), 0xffffffff);
+        QCOMPARE(image.pixel(1, 0), 0xffffffff);
+    }
+}
+
+enum CosmeticStrokerPaint
+{
+    Antialiasing,
+    Dashing
+};
+
+static void paint_func(QPainter *p, CosmeticStrokerPaint type)
+{
+    p->save();
+    switch (type) {
+    case Antialiasing:
+        p->setPen(Qt::black);
+        p->setRenderHint(QPainter::Antialiasing);
+        p->drawLine(4, 8, 42, 42);
+        break;
+    case Dashing:
+        p->setPen(QPen(Qt::black, 1, Qt::DashLine, Qt::RoundCap, Qt::MiterJoin));
+        p->drawLine(8, 8, 42, 8);
+        p->drawLine(42, 8, 42, 42);
+        p->drawLine(42, 42, 8, 42);
+        p->drawLine(8, 42, 8, 8);
+        break;
+    default:
+        Q_ASSERT(false);
+        break;
+    }
+    p->restore();
+}
+
+Q_DECLARE_METATYPE(CosmeticStrokerPaint)
+
+void tst_QPainter::cosmeticStrokerClipping_data()
+{
+    QTest::addColumn<CosmeticStrokerPaint>("paint");
+
+    QTest::newRow("antialiasing_paint") << Antialiasing;
+    QTest::newRow("dashing_paint") << Dashing;
+}
+
+void tst_QPainter::cosmeticStrokerClipping()
+{
+    QFETCH(CosmeticStrokerPaint, paint);
+
+    QImage image(50, 50, QImage::Format_RGB32);
+    image.fill(Qt::white);
+
+    QPainter p(&image);
+    paint_func(&p, paint);
+    p.end();
+
+    QImage old = image.copy();
+
+    image.paintEngine()->setSystemClip(QRect(10, 0, image.width() - 10, image.height()));
+
+    p.begin(&image);
+    p.fillRect(image.rect(), Qt::white);
+    paint_func(&p, paint);
+
+    // doing same paint operation again with different system clip should not change the image
+    QCOMPARE(old, image);
+
+    old = image;
+
+    p.setClipRect(QRect(20, 20, 30, 30));
+    p.fillRect(image.rect(), Qt::white);
+    paint_func(&p, paint);
+
+    // ditto for regular clips
+    QCOMPARE(old, image);
+}
+
 
 QTEST_MAIN(tst_QPainter)
 

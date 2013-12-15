@@ -66,7 +66,6 @@ SOURCES += \
            ../../corelib/io/qiodevice.cpp \
            ../../corelib/io/qtemporaryfile.cpp \
            ../../corelib/io/qtextstream.cpp \
-           ../../corelib/io/qurl.cpp \
            ../../corelib/kernel/qmetatype.cpp \
            ../../corelib/kernel/qvariant.cpp \
            ../../corelib/kernel/qsystemerror.cpp \
@@ -105,7 +104,6 @@ else:win32:SOURCES += ../../corelib/tools/qlocale_win.cpp
 
 macx: {
    QMAKE_MACOSX_DEPLOYMENT_TARGET = 10.4 #enables weak linking for 10.4 (exported)
-   SOURCES += ../../corelib/io/qfilesystemengine_mac.cpp
    SOURCES += ../../corelib/kernel/qcore_mac.cpp
    LIBS += -framework CoreServices
 }

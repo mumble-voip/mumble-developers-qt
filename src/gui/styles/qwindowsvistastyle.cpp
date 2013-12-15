@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -563,16 +563,13 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
             else if (state & State_HasFocus)
                 stateId = ETS_SELECTED;
             XPThemeData theme(widget, painter, QLatin1String("EDIT"), EP_EDITBORDER_HVSCROLL, stateId, option->rect);
-            uint resolve_mask = option->palette.resolve();
-            if (resolve_mask & (1 << QPalette::Base)) {
-                // Since EP_EDITBORDER_HVSCROLL does not us borderfill, theme.noContent cannot be used for clipping
-                int borderSize = 1;
-                pGetThemeInt(theme.handle(), theme.partId, theme.stateId, TMT_BORDERSIZE, &borderSize);
-                QRegion clipRegion = option->rect;
-                QRegion content = option->rect.adjusted(borderSize, borderSize, -borderSize, -borderSize);
-                clipRegion ^= content;
-                painter->setClipRegion(clipRegion);
-            }
+            // Since EP_EDITBORDER_HVSCROLL does not us borderfill, theme.noContent cannot be used for clipping
+            int borderSize = 1;
+            pGetThemeInt(theme.handle(), theme.partId, theme.stateId, TMT_BORDERSIZE, &borderSize);
+            QRegion clipRegion = option->rect;
+            QRegion content = option->rect.adjusted(borderSize, borderSize, -borderSize, -borderSize);
+            clipRegion ^= content;
+            painter->setClipRegion(clipRegion);
             d->drawBackground(theme);
             painter->restore();
         } else
@@ -750,7 +747,6 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
                 if (cg == QPalette::Normal && !(vopt->state & QStyle::State_Active))
                     cg = QPalette::Inactive;
 
-                QRect textRect = subElementRect(QStyle::SE_ItemViewItemText, option, widget);
                 QRect itemRect = subElementRect(QStyle::SE_ItemViewItemFocusRect, option, widget).adjusted(-1, 0, 1, 0);
                 itemRect.setTop(vopt->rect.top());
                 itemRect.setBottom(vopt->rect.bottom());
@@ -766,38 +762,41 @@ void QWindowsVistaStyle::drawPrimitive(PrimitiveElement element, const QStyleOpt
                 QPixmap pixmap;
 
                 if (vopt->backgroundBrush.style() != Qt::NoBrush) {
-                    QPointF oldBO = painter->brushOrigin();
+                    const QPointF oldBrushOrigin = painter->brushOrigin();
                     painter->setBrushOrigin(vopt->rect.topLeft());
                     painter->fillRect(vopt->rect, vopt->backgroundBrush);
+                    painter->setBrushOrigin(oldBrushOrigin);
                 }
 
                 if (hover || selected) {
-                    QString key = QString::fromLatin1("qvdelegate-%1-%2-%3-%4-%5").arg(sectionSize.width())
-                                                        .arg(sectionSize.height()).arg(selected).arg(active).arg(hover);
-                    if (!QPixmapCache::find(key, pixmap)) {
-                        pixmap = QPixmap(sectionSize);
-                        pixmap.fill(Qt::transparent);
+                    if (sectionSize.width() > 0 && sectionSize.height() > 0) {
+                        QString key = QString::fromLatin1("qvdelegate-%1-%2-%3-%4-%5").arg(sectionSize.width())
+                                                            .arg(sectionSize.height()).arg(selected).arg(active).arg(hover);
+                        if (!QPixmapCache::find(key, pixmap)) {
+                            pixmap = QPixmap(sectionSize);
+                            pixmap.fill(Qt::transparent);
 
-                        int state;
-                        if (selected && hover)
-                            state = LISS_HOTSELECTED;
-                        else if (selected && !active)
-                            state = LISS_SELECTEDNOTFOCUS;
-                        else if (selected)
-                            state = LISS_SELECTED;
-                        else
-                            state = LISS_HOT;
+                            int state;
+                            if (selected && hover)
+                                state = LISS_HOTSELECTED;
+                            else if (selected && !active)
+                                state = LISS_SELECTEDNOTFOCUS;
+                            else if (selected)
+                                state = LISS_SELECTED;
+                            else
+                                state = LISS_HOT;
 
-                        QPainter pixmapPainter(&pixmap);
-                        XPThemeData theme(d->treeViewHelper(), &pixmapPainter, QLatin1String("TREEVIEW"),
-                            LVP_LISTITEM, state, QRect(0, 0, sectionSize.width(), sectionSize.height()));
-                        if (theme.isValid()) {
-                            d->drawBackground(theme);
-                        } else {
-                            QWindowsXPStyle::drawPrimitive(PE_PanelItemViewItem, option, painter, widget);
-                            break;;
+                            QPainter pixmapPainter(&pixmap);
+                            XPThemeData theme(d->treeViewHelper(), &pixmapPainter, QLatin1String("TREEVIEW"),
+                                LVP_LISTITEM, state, QRect(0, 0, sectionSize.width(), sectionSize.height()));
+                            if (theme.isValid()) {
+                                d->drawBackground(theme);
+                            } else {
+                                QWindowsXPStyle::drawPrimitive(PE_PanelItemViewItem, option, painter, widget);
+                                break;;
+                            }
+                            QPixmapCache::insert(key, pixmap);
                         }
-                        QPixmapCache::insert(key, pixmap);
                     }
 
                     if (vopt->showDecorationSelected) {
@@ -1079,9 +1078,6 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
     case CE_ProgressBarContents:
         if (const QStyleOptionProgressBar *bar
                 = qstyleoption_cast<const QStyleOptionProgressBar *>(option)) {
-            int stateId = MBI_NORMAL;
-            if (disabled)
-                stateId = MBI_DISABLED;
             bool isIndeterminate = (bar->minimum == 0 && bar->maximum == 0);
             bool vertical = false;
             bool inverted = false;
@@ -1259,10 +1255,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                 pGetThemeMargins(theme.handle(), NULL, MENU_POPUPCHECK, 0, TMT_CONTENTMARGINS, NULL, &margins);
                 checkcol = qMax(menuitem->maxIconWidth, int(6 + size.cx + margins.cxLeftWidth + margins.cxRightWidth));
             }
-            QColor darkLine = option->palette.background().color().darker(108);
-            QColor lightLine = option->palette.background().color().lighter(107);
             QRect rect = option->rect;
-            QStyleOptionMenuItem mbiCopy = *menuitem;
 
             //draw vertical menu line
             QPoint p1 = QStyle::visualPos(option->direction, menuitem->rect, QPoint(checkcol, rect.top()));
@@ -1295,7 +1288,7 @@ void QWindowsVistaStyle::drawControl(ControlElement element, const QStyleOption 
                                           menuitem->rect.y(), checkcol - 6, menuitem->rect.height()));
 
             if (act) {
-                stateId = MBI_HOT;
+                stateId = dis ? MBI_DISABLED : MBI_HOT;
                 XPThemeData theme2(widget, painter, QLatin1String("MENU"), MENU_POPUPITEM, stateId, option->rect);
                 d->drawBackground(theme2);
             }
@@ -1842,30 +1835,31 @@ void QWindowsVistaStyle::drawComplexControl(ComplexControl control, const QStyle
                     pGetThemePartSize(theme.handle(), 0, theme.partId, theme.stateId, 0, TS_TRUE, &size);
                     int gw = size.cx, gh = size.cy;
 
+                    if (QSysInfo::WindowsVersion < QSysInfo::WV_WINDOWS8) {
+                        QRect gripperBounds;
+                        if (flags & State_Horizontal && ((swidth - contentsMargin.cxLeftWidth - contentsMargin.cxRightWidth) > gw)) {
+                            gripperBounds.setLeft(theme.rect.left() + swidth/2 - gw/2);
+                            gripperBounds.setTop(theme.rect.top() + sheight/2 - gh/2);
+                            gripperBounds.setWidth(gw);
+                            gripperBounds.setHeight(gh);
+                        } else if ((sheight - contentsMargin.cyTopHeight - contentsMargin.cyBottomHeight) > gh) {
+                            gripperBounds.setLeft(theme.rect.left() + swidth/2 - gw/2);
+                            gripperBounds.setTop(theme.rect.top() + sheight/2 - gh/2);
+                            gripperBounds.setWidth(gw);
+                            gripperBounds.setHeight(gh);
+                        }
 
-                    QRect gripperBounds;
-                    if (flags & State_Horizontal && ((swidth - contentsMargin.cxLeftWidth - contentsMargin.cxRightWidth) > gw)) {
-                        gripperBounds.setLeft(theme.rect.left() + swidth/2 - gw/2);
-                        gripperBounds.setTop(theme.rect.top() + sheight/2 - gh/2);
-                        gripperBounds.setWidth(gw);
-                        gripperBounds.setHeight(gh);
-                    } else if ((sheight - contentsMargin.cyTopHeight - contentsMargin.cyBottomHeight) > gh) {
-                        gripperBounds.setLeft(theme.rect.left() + swidth/2 - gw/2);
-                        gripperBounds.setTop(theme.rect.top() + sheight/2 - gh/2);
-                        gripperBounds.setWidth(gw);
-                        gripperBounds.setHeight(gh);
-                    }
-
-                    // Draw gripper if there is enough space
-                    if (!gripperBounds.isEmpty() && flags & State_Enabled) {
-                        painter->save();
-                        XPThemeData grippBackground = theme;
-                        grippBackground.partId = flags & State_Horizontal ? SBP_LOWERTRACKHORZ : SBP_LOWERTRACKVERT;
-                        theme.rect = gripperBounds;
-                        painter->setClipRegion(d->region(theme));// Only change inside the region of the gripper
-                        d->drawBackground(grippBackground);// The gutter is the grippers background
-                        d->drawBackground(theme);          // Transparent gripper ontop of background
-                        painter->restore();
+                        // Draw gripper if there is enough space
+                        if (!gripperBounds.isEmpty() && flags & State_Enabled) {
+                            painter->save();
+                            XPThemeData grippBackground = theme;
+                            grippBackground.partId = flags & State_Horizontal ? SBP_LOWERTRACKHORZ : SBP_LOWERTRACKVERT;
+                            theme.rect = gripperBounds;
+                            painter->setClipRegion(d->region(theme));// Only change inside the region of the gripper
+                            d->drawBackground(grippBackground);// The gutter is the grippers background
+                            d->drawBackground(theme);          // Transparent gripper ontop of background
+                            painter->restore();
+                        }
                     }
                 }
             }

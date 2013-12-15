@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -129,7 +129,7 @@ void tst_QMacStyle::sizeHints()
     setSize(&w, size);
 
     QLineEdit lineEdit1(&w);
-    QCOMPARE(sh(&lineEdit1).height(), SIZE(22, 19, 16));    // 16 in Builder, 15 in AHIG
+    QCOMPARE(sh(&lineEdit1).height(), SIZE(21, 19, 16));    // 16 in Builder, 15 in AHIG
 
     QProgressBar progress1(&w);
     progress1.setOrientation(Qt::Horizontal);
@@ -140,10 +140,10 @@ void tst_QMacStyle::sizeHints()
     QCOMPARE(sh(&progress1).width(), SIZE(16, 10, 10));   // Builder
 
     QRadioButton radio1("Radio", &w);
-    QCOMPARE(sh(&radio1).height(), SIZE(15, 12, 10));   // Builder
+    QCOMPARE(sh(&radio1).height(), SIZE(14, 12, 10));   // Builder
 
     QCheckBox checkBox1("Switch", &w);
-    QCOMPARE(sh(&checkBox1).height(), SIZE(14, 12, 10));   // Builder
+    QCOMPARE(sh(&checkBox1).height(), SIZE(13, 12, 10));   // Builder
 
     QComboBox comboBox1(&w);
     comboBox1.setEditable(false);
@@ -153,7 +153,7 @@ void tst_QMacStyle::sizeHints()
     QComboBox comboBox2(&w);
     comboBox2.setEditable(true);
     comboBox2.addItem("Foo");
-    QCOMPARE(sh(&comboBox2).height(), SIZE(20, 17, 15));
+    QCOMPARE(sh(&comboBox2).height(), SIZE(22, 17, 15));
 
     // Combos in toolbars use the actual widget rect to
     // avoid faulty clipping:
@@ -231,7 +231,7 @@ void tst_QMacStyle::sizeHints()
 
     // QMacStyle bug: label doesn't react to Small and Mini
     QLabel label1("Blah", &w);
-    QCOMPARE(sh(&label1).height(), SIZE(17, 14, 11));
+    QCOMPARE(sh(&label1).height(), SIZE(16, 14, 11));
 }
 
 void tst_QMacStyle::layoutMargins_data()

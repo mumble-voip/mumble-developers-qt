@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -60,51 +60,6 @@ QT_BEGIN_NAMESPACE
 #ifndef QT_NO_TRANSLATION
     extern QString qt_mac_applicationmenu_string(int type);
 #endif
-
-/*
-    Loads and instantiates the main app menu from the menu nib file(s).
-
-    The main app menu contains the Quit, Hide  About, Preferences entries, and
-    The reason for having the nib file is that those can not be created
-    programmatically. To ease deployment the nib files are stored in Qt resources
-    and written to QDir::temp() before loading. (Earlier Qt versions used
-    to require having the nib file in the QtGui framework.)
-*/
-void qt_mac_loadMenuNib(QT_MANGLE_NAMESPACE(QCocoaMenuLoader) *qtMenuLoader)
-{
-    // Create qt_menu.nib dir in temp.
-    QDir temp = QDir::temp();
-    temp.mkdir("qt_menu.nib");
-    QString nibDir = temp.canonicalPath() + QLatin1String("/") + QLatin1String("qt_menu.nib/");
-    if (!QDir(nibDir).exists()) {
-        qWarning("qt_mac_loadMenuNib: could not create nib directory in temp");
-        return;
-    }
-
-    // Copy nib files from resources to temp.
-    QDir nibResource(":/trolltech/mac/qt_menu.nib");
-    if (!nibResource.exists()) {
-        qWarning("qt_mac_loadMenuNib: could not load nib from resources");
-        return;
-    }
-    foreach (const QFileInfo &file, nibResource.entryInfoList()) {
-        QFile::copy(file.absoluteFilePath(), nibDir + QLatin1String("/") + file.fileName());
-    }
-
-    // Load and instantiate nib file from temp
-    NSString *nibDirPath = [const_cast<NSString *>(reinterpret_cast<const NSString *>(QCFString::toCFStringRef(nibDir))) autorelease];
-    NSURL *nibUrl = [NSURL fileURLWithPath : nibDirPath];
-    NSNib *nib = [[NSNib alloc] initWithContentsOfURL : nibUrl];
-    [nib autorelease];
-    if(!nib) {
-        qWarning("qt_mac_loadMenuNib: could not load nib from temp");
-        return;
-    }
-    bool ok = [nib instantiateNibWithOwner : qtMenuLoader topLevelObjects : nil];
-    if (!ok) {
-        qWarning("qt_mac_loadMenuNib: could not instantiate nib");
-    }
-}
 
 QT_END_NAMESPACE
 

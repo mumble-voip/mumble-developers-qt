@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -106,6 +106,8 @@ QT_END_NAMESPACE
 #include <stdlib.h>
 #include <string.h>
 #ifdef Q_OS_QNX
+#include "qvarlengtharray.h"
+
 #include <spawn.h>
 #include <sys/neutrino.h>
 #endif
@@ -126,17 +128,34 @@ static inline char *strdup(const char *data)
 
 static int qt_qprocess_deadChild_pipe[2];
 static struct sigaction qt_sa_old_sigchld_handler;
-static void qt_sa_sigchld_handler(int signum)
+static void qt_sa_sigchld_sigaction(int signum, siginfo_t *info, void *context)
 {
+    // *Never* use the info or contect variables in this function
+    // (except for passing them to the next signal in the chain).
+    // We cannot be sure if another library or if the application
+    // installed a signal handler for SIGCHLD without SA_SIGINFO
+    // and fails to pass the arguments to us. If they do that,
+    // these arguments contain garbage and we'd most likely crash.
+
     qt_safe_write(qt_qprocess_deadChild_pipe[1], "", 1);
 #if defined (QPROCESS_DEBUG)
     fprintf(stderr, "*** SIGCHLD\n");
 #endif
 
-    // load it as volatile
-    void (*oldAction)(int) = ((volatile struct sigaction *)&qt_sa_old_sigchld_handler)->sa_handler;
-    if (oldAction && oldAction != SIG_IGN)
-        oldAction(signum);
+    // load as volatile
+    volatile struct sigaction *vsa = &qt_sa_old_sigchld_handler;
+
+    if (qt_sa_old_sigchld_handler.sa_flags & SA_SIGINFO) {
+        void (*oldAction)(int, siginfo_t *, void *) = vsa->sa_sigaction;
+
+        if (oldAction)
+            oldAction(signum, info, context);
+    } else {
+        void (*oldAction)(int) = vsa->sa_handler;
+
+        if (oldAction && oldAction != SIG_IGN)
+            oldAction(signum);
+    }
 }
 
 static inline void add_fd(int &nfds, int fd, fd_set *fdset)
@@ -197,10 +216,16 @@ QProcessManager::QProcessManager()
 
     // set up the SIGCHLD handler, which writes a single byte to the dead
     // child pipe every time a child dies.
+
     struct sigaction action;
-    memset(&action, 0, sizeof(action));
-    action.sa_handler = qt_sa_sigchld_handler;
-    action.sa_flags = SA_NOCLDSTOP;
+    // use the old handler as template, i.e., preserve the signal mask
+    // otherwise the original signal handler might be interrupted although it
+    // was marked to never be interrupted
+    ::sigaction(SIGCHLD, NULL, &action);
+    action.sa_sigaction = qt_sa_sigchld_sigaction;
+    // set the SA_SIGINFO flag such that we can use the three argument handler
+    // function
+    action.sa_flags = SA_NOCLDSTOP | SA_SIGINFO;
     ::sigaction(SIGCHLD, &action, &qt_sa_old_sigchld_handler);
 }
 
@@ -223,7 +248,7 @@ QProcessManager::~QProcessManager()
 
     struct sigaction currentAction;
     ::sigaction(SIGCHLD, 0, &currentAction);
-    if (currentAction.sa_handler == qt_sa_sigchld_handler) {
+    if (currentAction.sa_sigaction == qt_sa_sigchld_sigaction) {
         ::sigaction(SIGCHLD, &qt_sa_old_sigchld_handler, 0);
     }
 }
@@ -324,16 +349,18 @@ void QProcessManager::unlock()
     mutex.unlock();
 }
 
-static void qt_create_pipe(int *pipe)
+static int qt_create_pipe(int *pipe)
 {
     if (pipe[0] != -1)
         qt_safe_close(pipe[0]);
     if (pipe[1] != -1)
         qt_safe_close(pipe[1]);
-    if (qt_safe_pipe(pipe) != 0) {
+    int pipe_ret = qt_safe_pipe(pipe);
+    if (pipe_ret != 0) {
         qWarning("QProcessPrivate::createPipe: Cannot create pipe %p: %s",
                  pipe, qPrintable(qt_error_string(errno)));
     }
+    return pipe_ret;
 }
 
 void QProcessPrivate::destroyPipe(int *pipe)
@@ -365,7 +392,8 @@ bool QProcessPrivate::createChannel(Channel &channel)
 
     if (channel.type == Channel::Normal) {
         // we're piping this channel to our own process
-        qt_create_pipe(channel.pipe);
+        if (qt_create_pipe(channel.pipe) != 0)
+            return false;
 
         // create the socket notifiers
         if (threadData->eventDispatcher) {
@@ -449,7 +477,8 @@ bool QProcessPrivate::createChannel(Channel &channel)
             Q_ASSERT(sink->pipe[0] == INVALID_Q_PIPE && sink->pipe[1] == INVALID_Q_PIPE);
 
             Q_PIPE pipe[2] = { -1, -1 };
-            qt_create_pipe(pipe);
+            if (qt_create_pipe(pipe) != 0)
+                return false;
             sink->pipe[0] = pipe[0];
             source->pipe[1] = pipe[1];
 
@@ -459,7 +488,7 @@ bool QProcessPrivate::createChannel(Channel &channel)
 }
 
 QT_BEGIN_INCLUDE_NAMESPACE
-#if defined(Q_OS_MAC) && !defined(QT_NO_CORESERVICES)
+#if defined(Q_OS_MAC) && !defined(Q_OS_IOS)
 # include <crt_externs.h>
 # define environ (*_NSGetEnviron())
 #else
@@ -470,7 +499,7 @@ QT_END_INCLUDE_NAMESPACE
 QProcessEnvironment QProcessEnvironment::systemEnvironment()
 {
     QProcessEnvironment env;
-#if !defined(Q_OS_MAC) || !defined(QT_NO_CORESERVICES)
+#if !defined(Q_OS_IOS)
     const char *entry;
     for (int count = 0; (entry = environ[count]); ++count) {
         const char *equal = strchr(entry, '=');
@@ -543,10 +572,15 @@ void QProcessPrivate::startProcess()
     // Initialize pipes
     if (!createChannel(stdinChannel) ||
         !createChannel(stdoutChannel) ||
-        !createChannel(stderrChannel))
+        !createChannel(stderrChannel) ||
+        qt_create_pipe(childStartedPipe) != 0 ||
+        qt_create_pipe(deathPipe) != 0) {
+        processError = QProcess::FailedToStart;
+        q->setErrorString(qt_error_string(errno));
+        emit q->error(processError);
+        cleanup();
         return;
-    qt_create_pipe(childStartedPipe);
-    qt_create_pipe(deathPipe);
+    }
 
     if (threadData->eventDispatcher) {
         startupSocketNotifier = new QSocketNotifier(childStartedPipe[0],
@@ -608,8 +642,10 @@ void QProcessPrivate::startProcess()
     // Duplicate the environment.
     int envc = 0;
     char **envp = 0;
-    if (environment.d.constData())
+    if (environment.d.constData()) {
+        QProcessEnvironmentPrivate::MutexLocker locker(environment.d);
         envp = _q_dupEnvironment(environment.d.constData()->hash, &envc);
+    }
 
     // Encode the working directory if it's non-empty, otherwise just pass 0.
     const char *workingDirPtr = 0;
@@ -866,8 +902,21 @@ static pid_t doSpawn(int fd_count, int fd_map[], char **argv, char **envp,
 
 pid_t QProcessPrivate::spawnChild(const char *workingDir, char **argv, char **envp)
 {
-    const int fd_count = 3;
-    int fd_map[fd_count];
+    // we need to manually fill in fd_map
+    // to inherit the file descriptors from
+    // the parent
+    const int fd_count = sysconf(_SC_OPEN_MAX);
+    QVarLengthArray<int, 1024> fd_map(fd_count);
+
+    for (int i = 3; i < fd_count; ++i) {
+        // here we rely that fcntl returns -1 and
+        // sets errno to EBADF
+        const int flags = ::fcntl(i, F_GETFD);
+
+        fd_map[i] = ((flags >= 0) && !(flags & FD_CLOEXEC))
+                  ? i : SPAWN_FDCLOSED;
+    }
+
     switch (processChannelMode) {
     case QProcess::ForwardedChannels:
         fd_map[0] = stdinChannel.pipe[0];
@@ -886,7 +935,7 @@ pid_t QProcessPrivate::spawnChild(const char *workingDir, char **argv, char **en
         break;
     }
 
-    pid_t childPid = doSpawn(fd_count, fd_map, argv, envp, workingDir, false);
+    pid_t childPid = doSpawn(fd_count, fd_map.data(), argv, envp, workingDir, false);
 
     if (childPid == -1) {
         QString error = qt_error_string(errno);
@@ -943,23 +992,9 @@ qint64 QProcessPrivate::readFromStderr(char *data, qint64 maxlen)
     return bytesRead;
 }
 
-static void qt_ignore_sigpipe()
-{
-    // Set to ignore SIGPIPE once only.
-    static QBasicAtomicInt atom = Q_BASIC_ATOMIC_INITIALIZER(0);
-    if (atom.testAndSetRelaxed(0, 1)) {
-        struct sigaction noaction;
-        memset(&noaction, 0, sizeof(noaction));
-        noaction.sa_handler = SIG_IGN;
-        ::sigaction(SIGPIPE, &noaction, 0);
-    }
-}
-
 qint64 QProcessPrivate::writeToStdin(const char *data, qint64 maxlen)
 {
-    qt_ignore_sigpipe();
-
-    qint64 written = qt_safe_write(stdinChannel.pipe[1], data, maxlen);
+    qint64 written = qt_safe_write_nosignal(stdinChannel.pipe[1], data, maxlen);
 #if defined QPROCESS_DEBUG
     qDebug("QProcessPrivate::writeToStdin(%p \"%s\", %lld) == %lld",
            data, qt_prettyDebug(data, maxlen, 16).constData(), maxlen, written);
@@ -1335,10 +1370,15 @@ bool QProcessPrivate::startDetached(const QString &program, const QStringList &a
 
     // To catch the startup of the child
     int startedPipe[2];
-    qt_safe_pipe(startedPipe);
+    if (qt_safe_pipe(startedPipe) != 0)
+        return false;
     // To communicate the pid of the child
     int pidPipe[2];
-    qt_safe_pipe(pidPipe);
+    if (qt_safe_pipe(pidPipe) != 0) {
+        qt_safe_close(startedPipe[0]);
+        qt_safe_close(startedPipe[1]);
+        return false;
+    }
 
     pid_t childPid = fork();
     if (childPid == 0) {

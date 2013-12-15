@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -259,7 +259,13 @@ QProcessEnvironment &QProcessEnvironment::operator=(const QProcessEnvironment &o
 */
 bool QProcessEnvironment::operator==(const QProcessEnvironment &other) const
 {
-    return d == other.d || (d && other.d && d->hash == other.d->hash);
+    if (d == other.d)
+        return true;
+    if (d && other.d) {
+        QProcessEnvironmentPrivate::OrderedMutexLocker locker(d, other.d);
+        return d->hash == other.d->hash;
+    }
+    return false;
 }
 
 /*!
@@ -270,6 +276,7 @@ bool QProcessEnvironment::operator==(const QProcessEnvironment &other) const
 */
 bool QProcessEnvironment::isEmpty() const
 {
+    // Needs no locking, as no hash nodes are accessed
     return d ? d->hash.isEmpty() : true;
 }
 
@@ -299,7 +306,10 @@ void QProcessEnvironment::clear()
 */
 bool QProcessEnvironment::contains(const QString &name) const
 {
-    return d ? d->hash.contains(d->prepareName(name)) : false;
+    if (!d)
+        return false;
+    QProcessEnvironmentPrivate::MutexLocker locker(d);
+    return d->hash.contains(d->prepareName(name));
 }
 
 /*!
@@ -320,7 +330,8 @@ bool QProcessEnvironment::contains(const QString &name) const
 */
 void QProcessEnvironment::insert(const QString &name, const QString &value)
 {
-    // d detaches from null
+    // our re-impl of detach() detaches from null
+    d.detach(); // detach before prepareName()
     d->hash.insert(d->prepareName(name), d->prepareValue(value));
 }
 
@@ -337,8 +348,10 @@ void QProcessEnvironment::insert(const QString &name, const QString &value)
 */
 void QProcessEnvironment::remove(const QString &name)
 {
-    if (d)
+    if (d) {
+        d.detach(); // detach before prepareName()
         d->hash.remove(d->prepareName(name));
+    }
 }
 
 /*!
@@ -357,6 +370,7 @@ QString QProcessEnvironment::value(const QString &name, const QString &defaultVa
     if (!d)
         return defaultValue;
 
+    QProcessEnvironmentPrivate::MutexLocker locker(d);
     QProcessEnvironmentPrivate::Hash::ConstIterator it = d->hash.constFind(d->prepareName(name));
     if (it == d->hash.constEnd())
         return defaultValue;
@@ -379,7 +393,10 @@ QString QProcessEnvironment::value(const QString &name, const QString &defaultVa
 */
 QStringList QProcessEnvironment::toStringList() const
 {
-    return d ? d->toList() : QStringList();
+    if (!d)
+        return QStringList();
+    QProcessEnvironmentPrivate::MutexLocker locker(d);
+    return d->toList();
 }
 
 /*!
@@ -390,7 +407,10 @@ QStringList QProcessEnvironment::toStringList() const
 */
 QStringList QProcessEnvironment::keys() const
 {
-    return d ? d->keys() : QStringList();
+    if (!d)
+        return QStringList();
+    QProcessEnvironmentPrivate::MutexLocker locker(d);
+    return d->keys();
 }
 
 /*!
@@ -405,7 +425,8 @@ void QProcessEnvironment::insert(const QProcessEnvironment &e)
     if (!e.d)
         return;
 
-    // d detaches from null
+    // our re-impl of detach() detaches from null
+    QProcessEnvironmentPrivate::MutexLocker locker(e.d);
     d->insert(*e.d);
 }
 
@@ -1681,10 +1702,10 @@ QProcessEnvironment QProcess::processEnvironment() const
 bool QProcess::waitForStarted(int msecs)
 {
     Q_D(QProcess);
-    if (d->processState == QProcess::Running)
-        return true;
+    if (d->processState == QProcess::Starting)
+        return d->waitForStarted(msecs);
 
-    return d->waitForStarted(msecs);
+    return d->processState == QProcess::Running;
 }
 
 /*! \reimp
@@ -2256,10 +2277,10 @@ bool QProcess::startDetached(const QString &program)
 }
 
 QT_BEGIN_INCLUDE_NAMESPACE
-#if defined(Q_OS_MAC) && !defined(QT_NO_CORESERVICES)
+#if defined(Q_OS_MAC) && !defined(Q_OS_IOS)
 # include <crt_externs.h>
 # define environ (*_NSGetEnviron())
-#elif defined(Q_OS_WINCE) || defined(Q_OS_SYMBIAN) || (defined(Q_OS_MAC) && defined(QT_NO_CORESERVICES))
+#elif defined(Q_OS_WINCE) || defined(Q_OS_SYMBIAN) || (defined(Q_OS_MAC) && defined(Q_OS_IOS))
   static char *qt_empty_environ[] = { 0 };
 #define environ qt_empty_environ
 #elif !defined(Q_OS_WIN)

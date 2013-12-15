@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtDeclarative module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -266,7 +266,7 @@ bool QDeclarativeCompiler::testLiteralAssignment(const QMetaProperty &prop,
         case QVariant::PointF:
             {
             bool ok;
-            QPointF point = QDeclarativeStringConverters::pointFFromString(string, &ok);
+            QDeclarativeStringConverters::pointFFromString(string, &ok);
             if (!ok) COMPILE_EXCEPTION(v, tr("Invalid property assignment: point expected"));
             }
             break;
@@ -274,7 +274,7 @@ bool QDeclarativeCompiler::testLiteralAssignment(const QMetaProperty &prop,
         case QVariant::SizeF:
             {
             bool ok;
-            QSizeF size = QDeclarativeStringConverters::sizeFFromString(string, &ok);
+            QDeclarativeStringConverters::sizeFFromString(string, &ok);
             if (!ok) COMPILE_EXCEPTION(v, tr("Invalid property assignment: size expected"));
             }
             break;
@@ -282,7 +282,7 @@ bool QDeclarativeCompiler::testLiteralAssignment(const QMetaProperty &prop,
         case QVariant::RectF:
             {
             bool ok;
-            QRectF rect = QDeclarativeStringConverters::rectFFromString(string, &ok);
+            QDeclarativeStringConverters::rectFFromString(string, &ok);
             if (!ok) COMPILE_EXCEPTION(v, tr("Invalid property assignment: rect expected"));
             }
             break;
@@ -326,10 +326,14 @@ void QDeclarativeCompiler::genLiteralAssignment(const QMetaProperty &prop,
     instr.line = v->location.start.line;
     if (prop.isEnumType()) {
         int value;
-        if (prop.isFlagType()) {
-            value = prop.enumerator().keysToValue(string.toUtf8().constData());
-        } else
-            value = prop.enumerator().keyToValue(string.toUtf8().constData());
+        if (v->value.isNumber()) { //Number saved from earlier check - not valid in testLiteralAssignment
+            value = v->value.asNumber();
+        } else {
+            if (prop.isFlagType())
+                value = prop.enumerator().keysToValue(string.toUtf8().constData());
+            else
+                value = prop.enumerator().keyToValue(string.toUtf8().constData());
+        }
 
         instr.type = QDeclarativeInstruction::StoreInteger;
         instr.storeInteger.propertyIndex = prop.propertyIndex();
@@ -2201,6 +2205,12 @@ bool QDeclarativeCompiler::buildPropertyLiteralAssignment(QDeclarativeParser::Pr
     return true;
 }
 
+struct StaticQtMetaObject : public QObject
+{
+    static const QMetaObject *get()
+        { return &static_cast<StaticQtMetaObject*> (0)->staticQtMetaObject; }
+};
+
 bool QDeclarativeCompiler::testQualifiedEnumAssignment(const QMetaProperty &prop,
                                               QDeclarativeParser::Object *obj,
                                               QDeclarativeParser::Value *v,
@@ -2233,20 +2243,32 @@ bool QDeclarativeCompiler::testQualifiedEnumAssignment(const QMetaProperty &prop
             objTypeName = objType->qmlTypeName();
     }
 
-    if (!type || objTypeName != type->qmlTypeName())
+    if (!type && typeName != QLatin1String("Qt"))
         return true;
 
     QString enumValue = parts.at(1);
-    int value;
-    if (prop.isFlagType()) {
-        value = prop.enumerator().keysToValue(enumValue.toUtf8().constData());
-    } else
-        value = prop.enumerator().keyToValue(enumValue.toUtf8().constData());
+    int value = -1;
+
+    if (type && objTypeName == type->qmlTypeName()) {
+        if (prop.isFlagType()) {
+            value = prop.enumerator().keysToValue(enumValue.toUtf8().constData());
+        } else {
+            value = prop.enumerator().keyToValue(enumValue.toUtf8().constData());
+        }
+    } else {
+        QByteArray enumName = enumValue.toUtf8();
+        //Special case for Qt object
+        const QMetaObject *metaObject = type ? type->metaObject() : StaticQtMetaObject::get();
+        for (int ii = metaObject->enumeratorCount() - 1; value == -1 && ii >= 0; --ii) {
+            QMetaEnum e = metaObject->enumerator(ii);
+            value = e.keyToValue(enumName.constData());
+        }
+    }
     if (value == -1)
         return true;
 
     v->type = Value::Literal;
-    v->value = QDeclarativeParser::Variant(enumValue);
+    v->value = QDeclarativeParser::Variant((double)value);
     *isAssignment = true;
 
     return true;

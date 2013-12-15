@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -1454,6 +1454,25 @@ void tst_QMenuBar::check_shortcutPress()
 #endif
 }
 
+class LayoutDirectionSaver
+{
+    Q_DISABLE_COPY(LayoutDirectionSaver)
+public:
+    explicit LayoutDirectionSaver(Qt::LayoutDirection direction)
+        : m_oldDirection(qApp->layoutDirection())
+    {
+       qApp->setLayoutDirection(direction);
+    }
+
+    ~LayoutDirectionSaver()
+    {
+        qApp->setLayoutDirection(m_oldDirection);
+    }
+
+private:
+    const Qt::LayoutDirection m_oldDirection;
+};
+
 void tst_QMenuBar::check_menuPosition()
 {
 #ifdef Q_WS_MAC
@@ -1516,10 +1535,9 @@ void tst_QMenuBar::check_menuPosition()
         menu.close();
     }
 
-    //in RTL, the menu should be stuck at the right of the action geometry
+    // QTBUG-2596: in RTL, the menu should be stuck at the right of the action geometry
     {
-        Qt::LayoutDirection dir = qApp->layoutDirection();
-        qApp->setLayoutDirection(Qt::RightToLeft);
+        LayoutDirectionSaver directionSaver(Qt::RightToLeft);
         menu.clear();
         QObject::connect(&menu, SIGNAL(aboutToShow()), &menu, SLOT(addActions()));
         QRect mbItemRect = mw->menuBar()->actionGeometry(menu_action);
@@ -1528,9 +1546,23 @@ void tst_QMenuBar::check_menuPosition()
         QVERIFY(menu.isActiveWindow());
         QCOMPARE(menu.geometry().right(), mbItemRect.right());
         menu.close();
-        qApp->setLayoutDirection(dir);
     }
 
+#ifndef QT_NO_CURSOR
+    // QTBUG-28031: Click at bottom-right corner.
+    {
+        mw->move(400, 200);
+        LayoutDirectionSaver directionSaver(Qt::RightToLeft);
+        QMenuBar *mb = mw->menuBar();
+        const QPoint localPos = mb->actionGeometry(menu.menuAction()).bottomRight() - QPoint(1, 1);
+        const QPoint globalPos = mb->mapToGlobal(localPos);
+        QCursor::setPos(globalPos);
+        QTest::mouseClick(mb, Qt::LeftButton, 0, localPos);
+        QTRY_VERIFY(menu.isActiveWindow());
+        QCOMPARE(menu.geometry().right() - 1, globalPos.x());
+        menu.close();
+    }
+#  endif // QT_NO_CURSOR
 }
 
 void tst_QMenuBar::task223138_triggered()

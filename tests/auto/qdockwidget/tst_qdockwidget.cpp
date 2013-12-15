@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the test suite of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -97,6 +97,7 @@ private slots:
     void task258459_visibilityChanged();
     void taskQTBUG_1665_closableChanged();
 	void taskQTBUG_9758_undockedGeometry();
+    void taskQTBUG_2940_resizeAfterUndocking();
 };
 
 // Testing get/set functions
@@ -362,7 +363,9 @@ void tst_QDockWidget::features()
 
 void tst_QDockWidget::setFloating()
 {
+    const QRect deskRect = QApplication::desktop()->availableGeometry();
     QMainWindow mw;
+    mw.move(deskRect.left() + deskRect.width() * 2 / 3, deskRect.top() + deskRect.height() / 3);
     QDockWidget dw;
     mw.addDockWidget(Qt::LeftDockWidgetArea, &dw);
 
@@ -372,10 +375,16 @@ void tst_QDockWidget::setFloating()
 #endif
 
     QVERIFY(!dw.isFloating());
+    const QPoint dockedPosition = dw.mapToGlobal(dw.pos());
 
     QSignalSpy spy(&dw, SIGNAL(topLevelChanged(bool)));
 
     dw.setFloating(true);
+    const QPoint floatingPosition = dw.pos();
+
+    // QTBUG-31044, show approximately at old position, give or take window frame.
+    QVERIFY((dockedPosition - floatingPosition).manhattanLength() < 50);
+
     QVERIFY(dw.isFloating());
     QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).value(0).toBool(), dw.isFloating());
@@ -769,7 +778,7 @@ void tst_QDockWidget::task169808_setFloating()
         QSize sizeHint() const
         {
             const QRect& deskRect = qApp->desktop()->availableGeometry();
-            return QSize(qMin(300, deskRect.width()), 300);
+            return QSize(qMin(300, deskRect.width() / 2), qMin(300, deskRect.height() / 2));
         }
 
         QSize minimumSizeHint() const
@@ -899,6 +908,32 @@ void tst_QDockWidget::taskQTBUG_9758_undockedGeometry()
     QVERIFY(dock1.y() >= 0);
 }
 
+void tst_QDockWidget::taskQTBUG_2940_resizeAfterUndocking()
+{
+    QMainWindow window;
+    QDockWidget dw("dw", &window);
+    window.setGeometry(window.x(), window.y(), 400, 400);
+    window.addDockWidget(Qt::TopDockWidgetArea, &dw);
+    window.show();
+    dw.setFloating(true);
+    dw.setGeometry(dw.x(), dw.y(), 100, 100);
+
+    // When docked, width should be the same than window's width
+    dw.setFloating(false);
+    QCOMPARE(dw.width(), window.width());
+
+    // Drag the dock widget out of the window
+    qApp->postEvent(&dw, new QMouseEvent(QEvent::MouseButtonPress,
+                    QPoint(10, 10), Qt::LeftButton, 0, 0));
+    qApp->postEvent(&dw, new QMouseEvent(QEvent::MouseMove,
+                    QPoint(100, 100), Qt::LeftButton,Qt::LeftButton, 0));
+    qApp->postEvent(&dw, new QMouseEvent(QEvent::MouseButtonRelease,
+                    QPoint(100, 100), Qt::LeftButton, 0, 0));
+    qApp->processEvents();
+
+    // When undocked, size should be the restored
+    QCOMPARE(dw.size(), QSize(100, 100));
+}
 
 
 QTEST_MAIN(tst_QDockWidget)

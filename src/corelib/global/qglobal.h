@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -44,11 +44,11 @@
 
 #include <stddef.h>
 
-#define QT_VERSION_STR   "4.8.2"
+#define QT_VERSION_STR   "4.8.6"
 /*
    QT_VERSION is (major << 16) + (minor << 8) + patch.
 */
-#define QT_VERSION 0x040802
+#define QT_VERSION 0x040806
 /*
    can be used like #if (QT_VERSION >= QT_VERSION_CHECK(4, 4, 0))
 */
@@ -327,8 +327,8 @@ namespace QT_NAMESPACE {}
 #  if !defined(MAC_OS_X_VERSION_10_8)
 #       define MAC_OS_X_VERSION_10_8 MAC_OS_X_VERSION_10_7 + 1
 #  endif
-#  if (MAC_OS_X_VERSION_MAX_ALLOWED > MAC_OS_X_VERSION_10_8)
-#    warning "This version of Mac OS X is unsupported"
+#  if !defined(MAC_OS_X_VERSION_10_9)
+#       define MAC_OS_X_VERSION_10_9 MAC_OS_X_VERSION_10_8 + 1
 #  endif
 #endif
 
@@ -427,6 +427,7 @@ namespace QT_NAMESPACE {}
 
 #if defined(Q_CC_MSVC) && _MSC_VER >= 1600
 #      define Q_COMPILER_RVALUE_REFS
+#      define Q_COMPILER_AUTO_FUNCTION
 #      define Q_COMPILER_AUTO_TYPE
 #      define Q_COMPILER_LAMBDA
 #      define Q_COMPILER_DECLTYPE
@@ -528,6 +529,7 @@ namespace QT_NAMESPACE {}
 #    if (__GNUC__ * 100 + __GNUC_MINOR__) >= 404
        /* C++0x features supported in GCC 4.4: */
 #      define Q_COMPILER_VARIADIC_TEMPLATES
+#      define Q_COMPILER_AUTO_FUNCTION
 #      define Q_COMPILER_AUTO_TYPE
 #      define Q_COMPILER_EXTERN_TEMPLATES
 #      define Q_COMPILER_DEFAULT_DELETE_MEMBERS
@@ -716,8 +718,10 @@ namespace QT_NAMESPACE {}
     in which case _BOOL is not defined
         this is the default in 4.2 compatibility mode triggered by -compat=4 */
 #  if __SUNPRO_CC >= 0x500
-#    define QT_NO_TEMPLATE_TEMPLATE_PARAMETERS
-   /* see http://developers.sun.com/sunstudio/support/Ccompare.html */
+#    if __SUNPRO_CC < 0x590
+#      define QT_NO_TEMPLATE_TEMPLATE_PARAMETERS
+       /* see http://www.oracle.com/technetwork/systems/cccompare-137792.html */
+#    endif
 #    if __SUNPRO_CC >= 0x590
 #      define Q_ALIGNOF(type)   __alignof__(type)
 #      define Q_TYPEOF(expr)    __typeof__(expr)
@@ -1587,6 +1591,7 @@ public:
         WV_VISTA    = 0x0080,
         WV_WINDOWS7 = 0x0090,
         WV_WINDOWS8 = 0x00a0,
+        WV_WINDOWS8_1 = 0x00b0,
         WV_NT_based = 0x00f0,
 
         /* version numbers */
@@ -1597,6 +1602,7 @@ public:
         WV_6_0      = WV_VISTA,
         WV_6_1      = WV_WINDOWS7,
         WV_6_2      = WV_WINDOWS8,
+        WV_6_3      = WV_WINDOWS8_1,
 
         WV_CE       = 0x0100,
         WV_CENET    = 0x0200,
@@ -1623,6 +1629,7 @@ public:
         MV_10_6 = 0x0008,
         MV_10_7 = 0x0009,
         MV_10_8 = 0x000A,
+        MV_10_9 = 0x000B,
 
         /* codenames */
         MV_CHEETAH = MV_10_0,
@@ -1633,7 +1640,8 @@ public:
         MV_LEOPARD = MV_10_5,
         MV_SNOWLEOPARD = MV_10_6,
         MV_LION = MV_10_7,
-        MV_MOUNTAINLION = MV_10_8
+        MV_MOUNTAINLION = MV_10_8,
+        MV_MAVERICKS = MV_10_9
     };
     static const MacVersion MacintoshVersion;
 #endif
@@ -1786,7 +1794,9 @@ class QDebug;
 class QNoDebug;
 #ifndef QT_NO_DEBUG_STREAM
 Q_CORE_EXPORT_INLINE QDebug qDebug();
+#ifndef QT_NO_WARNING_OUTPUT
 Q_CORE_EXPORT_INLINE QDebug qWarning();
+#endif
 Q_CORE_EXPORT_INLINE QDebug qCritical();
 #else
 inline QNoDebug qDebug();

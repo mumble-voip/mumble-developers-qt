@@ -1,44 +1,44 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
 **
 ****************************************************************************/
-
+#include <qconfig.h>
 #import <private/qcocoaview_mac_p.h>
 #ifdef QT_MAC_USE_COCOA
 
@@ -1027,8 +1027,10 @@ static int qCocoaViewCount = 0;
         QWidget *widgetToGetKey = 0;
         if (!composing || qApp->focusWidget())
             widgetToGetKey = qt_mac_getTargetForKeyEvent(qwidget);
+#ifndef QT_NO_IM
         else if (QMacInputContext *mic = qobject_cast<QMacInputContext *>(qApp->inputContext()))
             widgetToGetKey = mic->lastFocusWidget();
+#endif
         if (widgetToGetKey)
             qt_sendSpontaneousEvent(widgetToGetKey, &e);
         composing = false;
@@ -1221,6 +1223,7 @@ static int qCocoaViewCount = 0;
 @end
 
 QT_BEGIN_NAMESPACE
+#ifndef QT_NO_IM
 void QMacInputContext::reset()
 {
     QWidget *w = QInputContext::focusWidget();
@@ -1249,6 +1252,7 @@ bool QMacInputContext::isComposing() const
     }
     return false;
 }
+#endif // QT_NO_IM
 
 extern bool qt_mac_in_drag;
 void * /*NSImage */qt_mac_create_nsimage(const QPixmap &pm);
@@ -1280,8 +1284,11 @@ Qt::DropAction QDragManager::drag(QDrag *o)
         return Qt::IgnoreAction;
     /* At the moment it seems clear that Mac OS X does not want to drag with a non-left button
      so we just bail early to prevent it */
-    if(!(GetCurrentEventButtonState() & kEventMouseButtonPrimary))
+    if (!(GetCurrentEventButtonState() & kEventMouseButtonPrimary)) {
+        o->setMimeData(0);
+        o->deleteLater();
         return Qt::IgnoreAction;
+    }
 
     if(object) {
         dragPrivate()->source->removeEventFilter(this);
@@ -1338,7 +1345,6 @@ Qt::DropAction QDragManager::drag(QDrag *o)
 
     // Convert the image to NSImage:
     NSImage *image = (NSImage *)qt_mac_create_nsimage(pix);
-    [image retain];
 
     DnDParams *dndParams = macCurrentDnDParameters();
     QT_MANGLE_NAMESPACE(QCocoaView) *theView = static_cast<QT_MANGLE_NAMESPACE(QCocoaView) *>(dndParams->view);

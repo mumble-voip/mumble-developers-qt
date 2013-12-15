@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -502,6 +502,10 @@ void QQnxScreen::exposeRegion(QRegion r, int changing)
     // the region on our in-memory surface
     QScreen::exposeRegion(r, changing);
 
+#ifndef QT_NO_QWS_TRANSFORMED
+    if (qt_screen->isTransformed())
+        return;
+#endif
     // now our in-memory surface should be up to date with the latest changes.
 
     if (!d->hwSurface)
@@ -509,26 +513,22 @@ void QQnxScreen::exposeRegion(QRegion r, int changing)
 
     // the code below copies the region from the in-memory surface to the hardware.
 
-    // just get the bounding rectangle of the region. Most screen updates are rectangular
-    // anyways. Code could be optimized to blit each and every member of the region
-    // individually, but in real life, the speed-up is neglectable
-    const QRect br = r.boundingRect();
-    if (br.isEmpty())
-        return; // ignore empty regions because gf_draw_blit2 doesn't like 0x0 dimensions
-
     // start drawing.
     int ret = gf_draw_begin(d->context);
     if (ret != GF_ERR_OK) {
         qWarning("QQnxScreen: gf_draw_begin() failed with error code %d", ret);
         return;
     }
-
-    // blit the changed region from the memory surface to the hardware surface
-    ret = gf_draw_blit2(d->context, d->memSurface, d->hwSurface,
-                        br.x(), br.y(), br.right(), br.bottom(), br.x(), br.y());
-    if (ret != GF_ERR_OK)
-        qWarning("QQnxScreen: gf_draw_blit2() failed with error code %d", ret);
-
+    QVector<QRect> rects = r.rects();
+    Q_FOREACH (QRect rect, rects) {
+        if (!rect.isEmpty()) {
+            // blit the changed region from the memory surface to the hardware surface
+            ret = gf_draw_blit2(d->context, d->memSurface, d->hwSurface,
+                                rect.x(), rect.y(), rect.right(), rect.bottom(), rect.x(), rect.y());
+            if (ret != GF_ERR_OK)
+                qWarning("QQnxScreen: gf_draw_blit2() failed with error code %d", ret);
+        }
+    }
     // flush all drawing commands (in our case, a single blit)
     ret = gf_draw_flush(d->context);
     if (ret != GF_ERR_OK)
@@ -537,5 +537,37 @@ void QQnxScreen::exposeRegion(QRegion r, int changing)
     // tell QNX that we're done drawing.
     gf_draw_end(d->context);
 }
+
+#ifndef QT_NO_QWS_TRANSFORMED
+void QQnxScreen::setDirty(const QRect &r)
+{
+    //This function is called only when the screen is transformed
+    if (!qt_screen->isTransformed())
+        return;
+
+    if (!d->hwSurface)
+        return;
+
+    int ret = gf_draw_begin(d->context);
+
+    if (ret != GF_ERR_OK) {
+        qWarning("QQnxScreen: gf_draw_begin() failed with error code %d in setDirty", ret);
+        return;
+    }
+
+    // blit the changed region from the memory surface to the hardware surface
+    ret = gf_draw_blit2(d->context, d->memSurface, d->hwSurface,
+                        r.x(), r.y(), r.x()+ r.width(), r.y()+r.height(), r.x(), r.y());
+    if (ret != GF_ERR_OK)
+        qWarning("QQnxScreen: gf_draw_blit2() failed with error code %d in setDirty", ret);
+
+    ret = gf_draw_flush(d->context);
+    if (ret != GF_ERR_OK)
+        qWarning("QQnxScreen: gf_draw_flush() failed with error code %d in setDirty", ret);
+
+    // tell QNX that we're done drawing.
+    gf_draw_end(d->context);
+}
+#endif
 
 QT_END_NAMESPACE

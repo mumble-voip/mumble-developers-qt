@@ -1,38 +1,38 @@
 /****************************************************************************
 **
-** Copyright (C) 2012 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:LGPL$
-** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
-** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia.  For licensing terms and
+** conditions see http://qt.digia.com/licensing.  For further information
+** use the contact form at http://qt.digia.com/contact-us.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** GNU Lesser General Public License Usage
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 as published by the Free Software
+** Foundation and appearing in the file LICENSE.LGPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU Lesser General Public License version 2.1 requirements
+** will be met: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
+**
+** In addition, as a special exception, Digia gives you certain additional
+** rights.  These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
 **
 ** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
+** Alternatively, this file may be used under the terms of the GNU
+** General Public License version 3.0 as published by the Free Software
+** Foundation and appearing in the file LICENSE.GPL included in the
+** packaging of this file.  Please review the following information to
+** ensure the GNU General Public License version 3.0 requirements will be
+** met: http://www.gnu.org/copyleft/gpl.html.
 **
 **
 ** $QT_END_LICENSE$
@@ -2348,7 +2348,8 @@ void QGraphicsItemPrivate::setVisibleHelper(bool newVisible, bool explicitly, bo
     }
 
     // Update children with explicitly = false.
-    const bool updateChildren = update && !(flags & QGraphicsItem::ItemClipsChildrenToShape);
+    const bool updateChildren = update && !((flags & QGraphicsItem::ItemClipsChildrenToShape)
+                                            && !(flags & QGraphicsItem::ItemHasNoContents));
     foreach (QGraphicsItem *child, children) {
         if (!newVisible || !child->d_ptr->explicitlyHidden)
             child->d_ptr->setVisibleHelper(newVisible, false, updateChildren);
@@ -3290,12 +3291,14 @@ void QGraphicsItemPrivate::setFocusHelper(Qt::FocusReason focusReason, bool clim
         if (p->flags() & QGraphicsItem::ItemIsFocusScope) {
             QGraphicsItem *oldFocusScopeItem = p->d_ptr->focusScopeItem;
             p->d_ptr->focusScopeItem = q_ptr;
+            if (oldFocusScopeItem)
+                oldFocusScopeItem->d_ptr->focusScopeItemChange(false);
+            focusScopeItemChange(true);
             if (!p->focusItem() && !focusFromHide) {
-                if (oldFocusScopeItem)
-                    oldFocusScopeItem->d_ptr->focusScopeItemChange(false);
-                focusScopeItemChange(true);
-                // If you call setFocus on a child of a focus scope that
-                // doesn't currently have a focus item, then stop.
+                // Calling setFocus() on a child of a focus scope that does
+                // not have focus changes only the focus scope pointer,
+                // so that focus is restored the next time the scope gains
+                // focus.
                 return;
             }
             break;
@@ -3348,6 +3351,12 @@ void QGraphicsItem::clearFocus()
 */
 void QGraphicsItemPrivate::clearFocusHelper(bool giveFocusToParent)
 {
+    QGraphicsItem *subFocusItem = q_ptr;
+    if (flags & QGraphicsItem::ItemIsFocusScope) {
+        while (subFocusItem->d_ptr->focusScopeItem)
+            subFocusItem = subFocusItem->d_ptr->focusScopeItem;
+    }
+
     if (giveFocusToParent) {
         // Pass focus to the closest parent focus scope
         if (!inDestructor) {
@@ -3356,10 +3365,10 @@ void QGraphicsItemPrivate::clearFocusHelper(bool giveFocusToParent)
                 if (p->flags() & QGraphicsItem::ItemIsFocusScope) {
                     if (p->d_ptr->focusScopeItem == q_ptr) {
                         p->d_ptr->focusScopeItem = 0;
-                        if (!q_ptr->hasFocus()) //if it has focus, focusScopeItemChange is called elsewhere
+                        if (!subFocusItem->hasFocus()) //if it has focus, focusScopeItemChange is called elsewhere
                             focusScopeItemChange(false);
                     }
-                    if (q_ptr->hasFocus())
+                    if (subFocusItem->hasFocus())
                         p->d_ptr->setFocusHelper(Qt::OtherFocusReason, /* climb = */ false,
                                                  /* focusFromHide = */ false);
                     return;
@@ -3369,7 +3378,7 @@ void QGraphicsItemPrivate::clearFocusHelper(bool giveFocusToParent)
         }
     }
 
-    if (q_ptr->hasFocus()) {
+    if (subFocusItem->hasFocus()) {
         // Invisible items with focus must explicitly clear subfocus.
         clearSubFocus(q_ptr);
 
@@ -4208,9 +4217,14 @@ QTransform QGraphicsItem::deviceTransform(const QTransform &viewportTransform) c
         return QTransform();
     }
 
-    // First translate the base untransformable item.
-    untransformedAncestor->d_ptr->ensureSceneTransform();
-    QPointF mappedPoint = (untransformedAncestor->d_ptr->sceneTransform * viewportTransform).map(QPointF(0, 0));
+    // Determine the inherited origin. Find the parent of the topmost untransformable.
+    // Use its scene transform to map the position of the untransformable. Then use
+    // that viewport position as the anchoring point for the untransformable subtree.
+    QGraphicsItem *parentOfUntransformedAncestor = untransformedAncestor->parentItem();
+    QTransform inheritedMatrix;
+    if (parentOfUntransformedAncestor)
+        inheritedMatrix = parentOfUntransformedAncestor->sceneTransform();
+    QPointF mappedPoint = (inheritedMatrix * viewportTransform).map(untransformedAncestor->pos());
 
     // COMBINE
     QTransform matrix = QTransform::fromTranslate(mappedPoint.x(), mappedPoint.y());
@@ -7229,7 +7243,7 @@ void QGraphicsItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
 */
 void QGraphicsItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
 {
-    if (flags() & ItemIsSelectable) {
+    if (event->button() == Qt::LeftButton && (flags() & ItemIsSelectable)) {
         bool multiSelect = (event->modifiers() & Qt::ControlModifier) != 0;
         if (event->scenePos() == event->buttonDownScenePos(Qt::LeftButton)) {
             // The item didn't move

@@ -6,6 +6,11 @@ CONFIG += link_pkgconfig
 DEFINES += QT_BUILD_DBUS_LIB \
     DBUS_API_SUBJECT_TO_CHANGE
 QMAKE_CXXFLAGS += $$QT_CFLAGS_DBUS
+
+isEmpty(QT_LIBS_DBUS) {
+    QT_LIBS_DBUS += -ldbus-1
+}
+
 contains(QT_CONFIG, dbus-linked) { 
     LIBS_PRIVATE += $$QT_LIBS_DBUS
     DEFINES += QT_LINKED_LIBDBUS
@@ -25,7 +30,6 @@ win32 {
         -ladvapi32 \
         -lnetapi32 \
         -luser32
-    LIBS_PRIVATE += -ldbus-1
 }
 include(../qbase.pri)
 PUB_HEADERS = qdbusargument.h \
