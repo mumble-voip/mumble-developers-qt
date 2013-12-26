@@ -19,7 +19,9 @@ win32-msvc* {
     QMAKE_CXXFLAGS_DEBUG -= -MDd
     QMAKE_CXXFLAGS_DEBUG += -MTd
 }
-win32-msvc2012: DEFINES += _ALLOW_KEYWORD_MACROS
+win32-msvc2012|win32-msvc2013 {
+    DEFINES += _ALLOW_KEYWORD_MACROS
+}
 
 PRECOMPILED_HEADER = configure_pch.h
 
