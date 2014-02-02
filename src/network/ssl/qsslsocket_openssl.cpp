@@ -239,7 +239,7 @@ static int q_X509Callback(int ok, X509_STORE_CTX *ctx)
         // Store the error and at which depth the error was detected.
 	int error = q_X509_STORE_CTX_get_error(ctx);
 	int error_depth = q_X509_STORE_CTX_get_error_depth(ctx);
-	X509_VERIFY_PARAM *param = X509_STORE_CTX_get0_param(ctx);
+	X509_VERIFY_PARAM *param = q_X509_STORE_CTX_get0_param(ctx);
 	if ((error_depth != 0) || (error != X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) || (param->purpose != 0) || (param->trust != 0)) {
 	        _q_sslErrorList()->errors << qMakePair<int, int>(error, error_depth);
 	}
