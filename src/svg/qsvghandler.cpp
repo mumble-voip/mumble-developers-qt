@@ -59,8 +59,6 @@
 #include "qcolor.h"
 #include "qtextformat.h"
 #include "qvector.h"
-#include "qfileinfo.h"
-#include "qfile.h"
 #include "qdebug.h"
 #include "qmath.h"
 #include "qnumeric.h"
@@ -2704,8 +2702,7 @@ static QSvgNode *createImageNode(QSvgNode *parent,
         } else {
             qDebug()<<"QSvgHandler::createImageNode: Unrecognized inline image format!";
         }
-    } else
-        image = QImage(filename);
+    }
 
     if (image.isNull()) {
         qDebug()<<"couldn't create image from "<<filename;
@@ -3877,21 +3874,7 @@ bool QSvgHandler::processingInstruction(const QString &target, const QString &da
             pos = 0;
             pos = rx.indexIn(data, pos);
             QString addr = rx.cap(1);
-            QFileInfo fi(addr);
-            //qDebug()<<"External CSS file "<<fi.absoluteFilePath()<<fi.exists();
-            if (fi.exists()) {
-                QFile file(fi.absoluteFilePath());
-                if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                    return true;
-                }
-                QByteArray cssData = file.readAll();
-                QString css = QString::fromUtf8(cssData);
-
-                QCss::StyleSheet sheet;
-                QCss::Parser(css).parse(&sheet);
-                m_selector->styleSheets.append(sheet);
-            }
-
+            Q_UNUSED(addr);
         }
     }
 
