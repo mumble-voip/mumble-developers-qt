@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the Qt3Support module of the Qt Toolkit.
@@ -657,8 +657,8 @@ void Q3ToolBar::createPopup()
                 QString s = b->text();
                 if (s.isEmpty())
                     s = QLatin1String("");
-                if (b->pixmap())
-                    id = d->extensionPopup->insertItem(*b->pixmap(), s, b, SLOT(click()));
+                if (!b->icon().isNull())
+                    id = d->extensionPopup->insertItem(b->icon(), s, b, SLOT(click()));
                 else
                     id = d->extensionPopup->insertItem(s, b, SLOT(click()));
                 if (b->isToggleButton())

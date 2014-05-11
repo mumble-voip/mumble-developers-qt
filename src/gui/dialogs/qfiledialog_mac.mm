@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -293,6 +293,7 @@ QT_USE_NAMESPACE
 
 - (BOOL)isHiddenFile:(NSString *)filename isDir:(BOOL)isDir
 {
+#ifdef QT_MAC_USE_COCOA
     CFURLRef url = CFURLCreateWithFileSystemPath(kCFAllocatorDefault, (CFStringRef)filename, kCFURLPOSIXPathStyle, isDir);
     CFBooleanRef isHidden;
     Boolean errorOrHidden = false;
@@ -307,6 +308,11 @@ QT_USE_NAMESPACE
 #endif
     CFRelease(url);
     return errorOrHidden;
+#else
+    Q_UNUSED(filename);
+    Q_UNUSED(isDir);
+    return false;
+#endif
 }
 
 - (BOOL)panel:(id)sender shouldShowFilename:(NSString *)filename
@@ -330,7 +336,8 @@ QT_USE_NAMESPACE
         }
     }
 
-    QString qtFileName = QT_PREPEND_NAMESPACE(qt_mac_NSStringToQString)(filename);
+    QString qtFileName
+        = QFileInfo(QT_PREPEND_NAMESPACE(qt_mac_NSStringToQString)(filename)).fileName();
     // No filter means accept everything
     bool nameMatches = mSelectedNameFilter->isEmpty();
     // Check if the current file name filter accepts the file:

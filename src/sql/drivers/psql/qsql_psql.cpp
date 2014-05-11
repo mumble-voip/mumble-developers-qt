@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtSql module of the Qt Toolkit.
@@ -1235,8 +1235,8 @@ QString QPSQLDriver::formatValue(const QSqlField &field, bool trimStrings) const
                 // msecs need to be right aligned otherwise psql
                 // interpretes them wrong
                 r = QLatin1Char('\'') + QString::number(dt.year()) + QLatin1Char('-')
-                          + QString::number(dt.month()) + QLatin1Char('-')
-                          + QString::number(dt.day()) + QLatin1Char(' ')
+                          + QString::number(dt.month()).rightJustified(2, QLatin1Char('0')) + QLatin1Char('-')
+                          + QString::number(dt.day()).rightJustified(2, QLatin1Char('0')) + QLatin1Char(' ')
                           + tm.toString() + QLatin1Char('.')
                           + QString::number(tm.msec()).rightJustified(3, QLatin1Char('0'))
                           + QLatin1Char('\'');

@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtCore module of the Qt Toolkit.
@@ -513,7 +513,7 @@ static inline UINT inputTimerMask()
 #if defined(_MSC_VER) && _MSC_VER >= 1700 && !defined(_USING_V110_SDK71_)
     if (QSysInfo::WindowsVersion < QSysInfo::WV_WINDOWS8)
         result &= ~(QS_TOUCH | QS_POINTER);
-#endif //  _MSC_VER >= 1700
+#endif
     return result;
 }
 

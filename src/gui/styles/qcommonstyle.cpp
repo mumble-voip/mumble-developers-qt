@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -4929,6 +4929,10 @@ int QCommonStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget
 
     case SH_Menu_SubMenuPopupDelay:
         ret = 256;
+        break;
+
+    case SH_Menu_SloppySubMenus:
+        ret = true;
         break;
 
     case SH_ProgressDialog_TextLabelAlignment:

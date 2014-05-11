@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -2392,9 +2392,6 @@ int QMacStyle::styleHint(StyleHint sh, const QStyleOption *opt, const QWidget *w
         ret = QDialogButtons::Reject;
         break;
         */
-    case SH_Menu_SloppySubMenus:
-        ret = true;
-        break;
     case SH_GroupBox_TextLabelVerticalAlignment:
         ret = Qt::AlignTop;
         break;

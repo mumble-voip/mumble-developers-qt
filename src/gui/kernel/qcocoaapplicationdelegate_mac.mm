@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -287,6 +287,19 @@ static void cleanupCocoaApplicationDelegate()
     qt_last_mouse_receiver = 0;
     qt_last_native_mouse_receiver = 0;
     qt_button_down = 0;
+}
+
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)theApplication hasVisibleWindows:(BOOL)flag
+{
+    Q_UNUSED(theApplication);
+    Q_UNUSED(flag);
+    // The reflection delegate gets precedence
+    if (reflectionDelegate
+        && [reflectionDelegate respondsToSelector:@selector(applicationShouldHandleReopen:hasVisibleWindows:)])
+        return [reflectionDelegate applicationShouldHandleReopen:theApplication hasVisibleWindows:flag];
+
+    onApplicationChangedActivation(true);
+    return NO;
 }
 
 - (void)applicationDidChangeScreenParameters:(NSNotification *)notification

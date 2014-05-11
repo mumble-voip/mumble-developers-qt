@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -2594,6 +2594,9 @@ bool QMdiArea::eventFilter(QObject *object, QEvent *event)
         }
         return QAbstractScrollArea::eventFilter(object, event);
     }
+
+    if (subWindow->mdiArea() != this)
+        return QAbstractScrollArea::eventFilter(object, event);
 
     // QMdiSubWindow events:
     switch (event->type()) {

@@ -71,6 +71,8 @@
 
 #if OS(WINDOWS) && !OS(WINCE)
 #include <windows.h>
+#elif OS(DARWIN)
+#include <libkern/OSAtomic.h>
 #elif OS(ANDROID)
 #include <cutils/atomic.h>
 #elif OS(QNX)
@@ -221,6 +223,12 @@ inline int atomicDecrement(int* addend) { return InterlockedDecrement(reinterpre
 inline int atomicIncrement(int volatile* addend) { return InterlockedIncrement(reinterpret_cast<long volatile*>(addend)); }
 inline int atomicDecrement(int volatile* addend) { return InterlockedDecrement(reinterpret_cast<long volatile*>(addend)); }
 #endif
+
+#elif OS(DARWIN)
+#define WTF_USE_LOCKFREE_THREADSAFESHARED 1
+
+inline int atomicIncrement(int volatile* addend) { return OSAtomicIncrement32Barrier(const_cast<int*>(addend)); }
+inline int atomicDecrement(int volatile* addend) { return OSAtomicDecrement32Barrier(const_cast<int*>(addend)); }
 
 #elif OS(ANDROID)
 

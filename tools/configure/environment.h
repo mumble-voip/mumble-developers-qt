@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the tools applications of the Qt Toolkit.
@@ -66,7 +66,7 @@ public:
     static Compiler detectCompiler();
     static QString detectQMakeSpec();
     static bool detectExecutable(const QString &executable);
-    static int detectGPlusPlusVersion(const QString &executable, bool *is64bit);
+    static int detectGPlusPlusVersion(const QString &executable);
     static QString readProcessStandardOutput(const QString &commandLine);
 
     static int execute(QStringList arguments, const QStringList &additionalEnv, const QStringList &removeEnv);

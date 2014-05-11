@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2013 Digia Plc and/or its subsidiary(-ies).
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
 ** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the QtGui module of the Qt Toolkit.
@@ -412,6 +412,10 @@ QWidget *QGraphicsProxyWidgetPrivate::findFocusChild(QWidget *child, bool next) 
 void QGraphicsProxyWidgetPrivate::_q_removeWidgetSlot()
 {
     Q_Q(QGraphicsProxyWidget);
+    if (!widget.isNull()) {
+        if (QWExtra *extra = widget->d_func()->extra)
+            extra->proxyWidget = 0;
+    }
     widget = 0;
     delete q;
 }
