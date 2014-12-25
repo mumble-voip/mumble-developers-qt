@@ -190,9 +190,26 @@ static OUTLINETEXTMETRIC *getOutlineTextMetric(HDC hdc)
     return otm;
 }
 
+bool QFontEngineWin::hasCFFTable() const
+{
+    HDC hdc = shared_dc();
+    SelectObject(hdc, hfont);
+    return GetFontData(hdc, MAKE_TAG('C', 'F', 'F', ' '), 0, 0, 0) != GDI_ERROR;
+}
+
+bool QFontEngineWin::hasCMapTable() const
+{
+    HDC hdc = shared_dc();
+    SelectObject(hdc, hfont);
+    return GetFontData(hdc, MAKE_TAG('c', 'm', 'a', 'p'), 0, 0, 0) != GDI_ERROR;
+}
+
 void QFontEngineWin::getCMap()
 {
-    ttf = (bool)(tm.tmPitchAndFamily & TMPF_TRUETYPE);
+    ttf = (bool)(tm.tmPitchAndFamily & TMPF_TRUETYPE) || hasCMapTable();
+
+    cffTable = hasCFFTable();
+
     HDC hdc = shared_dc();
     SelectObject(hdc, hfont);
     bool symb = false;
@@ -279,7 +296,7 @@ int QFontEngineWin::getGlyphIndexes(const QChar *str, int numChars, QGlyphLayout
         if (symbol) {
             for (; i < numChars; ++i, ++glyph_pos) {
                 unsigned int uc = getChar(str, i, numChars);
-                glyphs->glyphs[i] = getTrueTypeGlyphIndex(cmap, uc);
+                glyphs->glyphs[glyph_pos] = getTrueTypeGlyphIndex(cmap, uc);
                 if(!glyphs->glyphs[glyph_pos] && uc < 0x100)
                     glyphs->glyphs[glyph_pos] = getTrueTypeGlyphIndex(cmap, uc + 0xf000);
             }
@@ -373,6 +390,7 @@ HGDIOBJ QFontEngineWin::selectDesignFont() const
 {
     LOGFONT f = logfont;
     f.lfHeight = unitsPerEm;
+    f.lfWidth = 0;
     HFONT designFont = CreateFontIndirect(&f);
     return SelectObject(shared_dc(), designFont);
 }
@@ -846,13 +864,34 @@ static bool addGlyphToPath(glyph_t glyph, const QFixedPoint &position, HDC hdc,
     mat.eM11.fract = mat.eM22.fract = 0;
     mat.eM21.value = mat.eM12.value = 0;
     mat.eM21.fract = mat.eM12.fract = 0;
+
+    GLYPHMETRICS gMetric;
+    memset(&gMetric, 0, sizeof(GLYPHMETRICS));
+
+#ifndef Q_OS_WINCE
+    if (metric) {
+        // If metrics requested, retrieve first using GGO_METRICS, because the returned
+        // values are incorrect for OpenType PS fonts if obtained at the same time as the
+        // glyph paths themselves (ie. with GGO_NATIVE as the format).
+        uint format = GGO_METRICS;
+        if (ttf)
+            format |= GGO_GLYPH_INDEX;
+        int res = GetGlyphOutline(hdc, glyph, format, &gMetric, 0, 0, &mat);
+        if (res == GDI_ERROR) {
+            return false;
+        }
+        // #### obey scale
+        *metric = glyph_metrics_t(gMetric.gmptGlyphOrigin.x, -gMetric.gmptGlyphOrigin.y,
+                                  (int)gMetric.gmBlackBoxX, (int)gMetric.gmBlackBoxY,
+                                  gMetric.gmCellIncX, gMetric.gmCellIncY);
+    }
+#endif
+
     uint glyphFormat = GGO_NATIVE;
 
     if (ttf)
         glyphFormat |= GGO_GLYPH_INDEX;
 
-    GLYPHMETRICS gMetric;
-    memset(&gMetric, 0, sizeof(GLYPHMETRICS));
     int bufferSize = GDI_ERROR;
 #if !defined(Q_WS_WINCE)
     bufferSize = GetGlyphOutline(hdc, glyph, glyphFormat, &gMetric, 0, 0, &mat);
@@ -871,12 +910,14 @@ static bool addGlyphToPath(glyph_t glyph, const QFixedPoint &position, HDC hdc,
         return false;
     }
 
-    if(metric) {
+#ifdef Q_OS_WINCE
+    if (metric) {
         // #### obey scale
         *metric = glyph_metrics_t(gMetric.gmptGlyphOrigin.x, -gMetric.gmptGlyphOrigin.y,
                                   (int)gMetric.gmBlackBoxX, (int)gMetric.gmBlackBoxY,
                                   gMetric.gmCellIncX, gMetric.gmCellIncY);
     }
+#endif
 
     int offset = 0;
     int headerOffset = 0;
@@ -1072,7 +1113,7 @@ void QFontEngineWin::getUnscaledGlyph(glyph_t glyph, QPainterPath *path, glyph_m
 
 bool QFontEngineWin::getSfntTableData(uint tag, uchar *buffer, uint *length) const
 {
-    if (!ttf)
+    if (!ttf && !cffTable)
         return false;
     HDC hdc = shared_dc();
     SelectObject(hdc, hfont);
