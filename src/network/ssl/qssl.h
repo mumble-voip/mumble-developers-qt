@@ -76,10 +76,15 @@ namespace QSsl {
     enum SslProtocol {
         SslV3,
         SslV2,
-        TlsV1, // ### Qt 5: rename to TlsV1_0 or so
+        TlsV1_0,
+        TlsV1 = TlsV1_0,
         AnyProtocol,
         TlsV1SslV3,
         SecureProtocols,
+
+        TlsV1_1,
+        TlsV1_2,
+
         UnknownProtocol = -1
     };
 
