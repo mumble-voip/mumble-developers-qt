@@ -48,6 +48,8 @@
 #include "qstringlist.h"
 #include "qdatetime.h"
 
+#include <private/qsystemlibrary_p.h>
+
 #ifndef QT_NO_QOBJECT
 #include <private/qthread_p.h>
 #endif
@@ -1137,6 +1139,7 @@ bool qSharedBuild()
     \value WV_WINDOWS7 Windows 7, Windows Server 2008 R2 (operating system version 6.1)
     \value WV_WINDOWS8 Windows 8 (operating system version 6.2)
     \value WV_WINDOWS8_1 Windows 8.1 (operating system version 6.3), introduced in Qt 4.8.6
+    \value WV_WINDOWS10 Windows 10 (operating system version 10.0), introduced in Qt 4.8.7
 
     Alternatively, you may use the following macros which correspond directly to the Windows operating system version number:
 
@@ -1148,6 +1151,7 @@ bool qSharedBuild()
     \value WV_6_1   Operating system version 6.1, corresponds to Windows 7 and Windows Server 2008 R2
     \value WV_6_2   Operating system version 6.2, corresponds to Windows 8
     \value WV_6_3   Operating system version 6.3, corresponds to Windows 8.1, introduced in Qt 4.8.6
+    \value WV_10_0  Operating system version 10.0, corresponds to Windows 10, introduced in Qt 4.8.7
 
     CE-based versions:
 
@@ -1691,6 +1695,69 @@ QT_BEGIN_INCLUDE_NAMESPACE
 #include "qt_windows.h"
 QT_END_INCLUDE_NAMESPACE
 
+#  ifndef Q_OS_WINCE
+
+// Determine Windows versions >= 8 by querying the version of kernel32.dll.
+static inline bool determineWinOsVersionPost8(OSVERSIONINFO *result)
+{
+    typedef WORD (WINAPI* PtrGetFileVersionInfoSizeW)(LPCWSTR, LPDWORD);
+    typedef BOOL (WINAPI* PtrVerQueryValueW)(LPCVOID, LPCWSTR, LPVOID, PUINT);
+    typedef BOOL (WINAPI* PtrGetFileVersionInfoW)(LPCWSTR, DWORD, DWORD, LPVOID);
+
+    QSystemLibrary versionLib(QLatin1String("version"));
+    if (!versionLib.load())
+        return false;
+    PtrGetFileVersionInfoSizeW getFileVersionInfoSizeW = (PtrGetFileVersionInfoSizeW)versionLib.resolve("GetFileVersionInfoSizeW");
+    PtrVerQueryValueW verQueryValueW = (PtrVerQueryValueW)versionLib.resolve("VerQueryValueW");
+    PtrGetFileVersionInfoW getFileVersionInfoW = (PtrGetFileVersionInfoW)versionLib.resolve("GetFileVersionInfoW");
+    if (!getFileVersionInfoSizeW || !verQueryValueW || !getFileVersionInfoW)
+        return false;
+
+    const wchar_t kernel32Dll[] = L"kernel32.dll";
+    DWORD handle;
+    const DWORD size = getFileVersionInfoSizeW(kernel32Dll, &handle);
+    if (!size)
+        return false;
+    QScopedArrayPointer<BYTE> versionInfo(new BYTE[size]);
+    if (!getFileVersionInfoW(kernel32Dll, handle, size, versionInfo.data()))
+        return false;
+    UINT uLen;
+    VS_FIXEDFILEINFO *fileInfo = 0;
+    if (!verQueryValueW(versionInfo.data(), L"\\", (LPVOID *)&fileInfo, &uLen))
+        return false;
+    const DWORD fileVersionMS = fileInfo->dwFileVersionMS;
+    const DWORD fileVersionLS = fileInfo->dwFileVersionLS;
+    result->dwMajorVersion = HIWORD(fileVersionMS);
+    result->dwMinorVersion = LOWORD(fileVersionMS);
+    result->dwBuildNumber = HIWORD(fileVersionLS);
+    return true;
+}
+
+// Fallback for determining Windows versions >= 8 by looping using the
+// version check macros. Note that it will return build number=0 to avoid
+// inefficient looping.
+static inline void determineWinOsVersionFallbackPost8(OSVERSIONINFO *result)
+{
+    result->dwBuildNumber = 0;
+    DWORDLONG conditionMask = 0;
+    VER_SET_CONDITION(conditionMask, VER_MAJORVERSION, VER_GREATER_EQUAL);
+    VER_SET_CONDITION(conditionMask, VER_PLATFORMID, VER_EQUAL);
+    OSVERSIONINFOEX checkVersion = { sizeof(OSVERSIONINFOEX), result->dwMajorVersion, 0,
+                                     result->dwBuildNumber, result->dwPlatformId, {'\0'}, 0, 0, 0, 0, 0 };
+    for ( ; VerifyVersionInfo(&checkVersion, VER_MAJORVERSION | VER_PLATFORMID, conditionMask); ++checkVersion.dwMajorVersion)
+        result->dwMajorVersion = checkVersion.dwMajorVersion;
+    conditionMask = 0;
+    checkVersion.dwMajorVersion = result->dwMajorVersion;
+    checkVersion.dwMinorVersion = 0;
+    VER_SET_CONDITION(conditionMask, VER_MAJORVERSION, VER_EQUAL);
+    VER_SET_CONDITION(conditionMask, VER_MINORVERSION, VER_GREATER_EQUAL);
+    VER_SET_CONDITION(conditionMask, VER_PLATFORMID, VER_EQUAL);
+    for ( ; VerifyVersionInfo(&checkVersion, VER_MAJORVERSION | VER_MINORVERSION | VER_PLATFORMID, conditionMask); ++checkVersion.dwMinorVersion)
+        result->dwMinorVersion = checkVersion.dwMinorVersion;
+}
+
+#  endif // !Q_OS_WINCE
+
 static inline OSVERSIONINFO winOsVersion()
 {
     OSVERSIONINFO result = { sizeof(OSVERSIONINFO), 0, 0, 0, 0, {'\0'}};
@@ -1706,16 +1773,8 @@ static inline OSVERSIONINFO winOsVersion()
 #  endif
 #  ifndef Q_OS_WINCE
     if (result.dwMajorVersion == 6 && result.dwMinorVersion == 2) {
-        // This could be Windows 8.1 or higher. Note that as of Windows 9,
-        // the major version needs to be checked as well.
-        DWORDLONG conditionMask = 0;
-        VER_SET_CONDITION(conditionMask, VER_MAJORVERSION, VER_GREATER_EQUAL);
-        VER_SET_CONDITION(conditionMask, VER_MINORVERSION, VER_GREATER_EQUAL);
-        VER_SET_CONDITION(conditionMask, VER_PLATFORMID, VER_EQUAL);
-        OSVERSIONINFOEX checkVersion = { sizeof(OSVERSIONINFOEX), result.dwMajorVersion, result.dwMinorVersion,
-                                         result.dwBuildNumber, result.dwPlatformId, {'\0'}, 0, 0, 0, 0, 0 };
-        for ( ; VerifyVersionInfo(&checkVersion, VER_MAJORVERSION | VER_MINORVERSION | VER_PLATFORMID, conditionMask); ++checkVersion.dwMinorVersion)
-            result.dwMinorVersion = checkVersion.dwMinorVersion;
+        if (!determineWinOsVersionPost8(&result))
+            determineWinOsVersionFallbackPost8(&result);
     }
 #  endif // !Q_OS_WINCE
     return result;
@@ -1788,6 +1847,8 @@ QSysInfo::WinVersion QSysInfo::windowsVersion()
             winver = QSysInfo::WV_WINDOWS8;
         } else if (osver.dwMajorVersion == 6 && osver.dwMinorVersion == 3) {
             winver = QSysInfo::WV_WINDOWS8_1;
+        } else if (osver.dwMajorVersion == 10 && osver.dwMinorVersion == 0) {
+            winver = QSysInfo::WV_WINDOWS10;
         } else {
             qWarning("Qt: Untested Windows version %d.%d detected!",
                      int(osver.dwMajorVersion), int(osver.dwMinorVersion));
