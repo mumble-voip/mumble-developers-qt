@@ -216,7 +216,7 @@ bool QSystemTrayIconSys::showMessage(const QString &title, const QString &messag
     memcpy(tnd.szInfoTitle, title.utf16(), qMin(title.length() + 1, 64) * sizeof(wchar_t));
 
     tnd.uID = q_uNOTIFYICONID;
-    tnd.dwInfoFlags = iconFlag(type);
+    tnd.dwInfoFlags = iconFlag(type) | NIIF_NOSOUND;
     tnd.cbSize = notifyIconSize;
     tnd.hWnd = winId();
     tnd.uTimeout = uSecs;
