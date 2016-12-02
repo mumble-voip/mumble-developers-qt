@@ -487,7 +487,9 @@ QString QSettingsPrivate::variantToString(const QVariant &v)
         case QVariant::Double:
         case QVariant::KeySequence: {
             result = v.toString();
-            if (result.startsWith(QLatin1Char('@')))
+            if (result.contains(QChar::Null))
+                result = QLatin1String("@String(") + result + QLatin1Char(')');
+            else if (result.startsWith(QLatin1Char('@')))
                 result.prepend(QLatin1Char('@'));
             break;
         }
@@ -554,6 +556,8 @@ QVariant QSettingsPrivate::stringToVariant(const QString &s)
         if (s.endsWith(QLatin1Char(')'))) {
             if (s.startsWith(QLatin1String("@ByteArray("))) {
                 return QVariant(s.toLatin1().mid(11, s.size() - 12));
+            } else if (s.startsWith(QLatin1String("@String("))) {
+                return QVariant(s.midRef(8, s.size() - 9).toString());
             } else if (s.startsWith(QLatin1String("@Variant("))) {
 #ifndef QT_NO_DATASTREAM
                 QByteArray a(s.toLatin1().mid(9));
